@@ -9,8 +9,33 @@ interface TurnMetrics {
   turnNumber: number;
   startedAt: number;
   firstChunkAt: number | null;
+  lastChunkAt: number | null;
   chunksProcessed: number;
   totalBytes: number;
+  /** Time when first meaningful input was received */
+  firstInputAt: number | null;
+  /** Time to first chunk (output) from turn start */
+  ttfc: number | null;
+  /** Input-to-output latency (first input to first output) */
+  inputToOutputLatency: number | null;
+}
+
+/** Latency statistics for a stage */
+interface LatencyStats {
+  /** Minimum latency observed */
+  min: number | null;
+  /** Maximum latency observed */
+  max: number | null;
+  /** Average latency */
+  avg: number | null;
+  /** All latency samples for percentile calculation */
+  samples: number[];
+  /** P50 latency */
+  p50: number | null;
+  /** P95 latency */
+  p95: number | null;
+  /** P99 latency */
+  p99: number | null;
 }
 
 interface StageMetrics {
@@ -25,6 +50,29 @@ interface StageMetrics {
   turns: TurnMetrics[];
   /** Current turn being processed */
   currentTurn: TurnMetrics | null;
+  /** Input-to-output latency stats across all turns */
+  latencyStats: LatencyStats;
+  /** Inter-chunk latency (time between consecutive output chunks) */
+  interChunkLatencies: number[];
+  /** Average inter-chunk latency */
+  avgInterChunkLatency: number | null;
+}
+
+/** Serializable latency data for visualization */
+interface LatencyData {
+  stageName: string;
+  turnNumber: number;
+  ttfc: number | null;
+  inputToOutput: number | null;
+  interChunkAvg: number | null;
+  stats: {
+    min: number | null;
+    max: number | null;
+    avg: number | null;
+    p50: number | null;
+    p95: number | null;
+    p99: number | null;
+  };
 }
 
 /** Common interface for visualizers */
@@ -35,6 +83,7 @@ interface VisualizerInterface {
   onProcessing(stageName: string, turnNumber: number): void;
   onFirstChunk(stageName: string, turnNumber: number, ttfc: number, chunkPreview?: string): void;
   onChunk(stageName: string, metrics: StageMetrics, chunkPreview?: string): void;
+  onLatencyUpdate(latency: LatencyData): void;
 }
 
 interface ObservabilityOptions {
@@ -88,6 +137,17 @@ function createObservableTransform<I, O>(
     processingTimeMs: 0,
     turns: [],
     currentTurn: null,
+    latencyStats: {
+      min: null,
+      max: null,
+      avg: null,
+      samples: [],
+      p50: null,
+      p95: null,
+      p99: null,
+    },
+    interChunkLatencies: [],
+    avgInterChunkLatency: null,
   };
   metrics.set(stageName, stageMetrics);
 
@@ -104,24 +164,71 @@ function createObservableTransform<I, O>(
   const reader = transform.readable.getReader();
   const writer = transform.writable.getWriter();
 
+  // Track if we're waiting for output (processing state)
+  let isProcessing = false;
+  let inputTurnNumber = 1;
+  // Track pending input timestamp for when input arrives before turn is created
+  let pendingInputTimestamp: number | null = null;
+  // Track last output time to detect new turn on input side
+  let lastOutputTimestamp: number = 0;
+
   /**
    * Start a new turn for this stage
    */
   function startNewTurn(now: number): TurnMetrics {
     // Finalize previous turn if exists
     if (stageMetrics.currentTurn) {
+      finalizeTurnLatency(stageMetrics.currentTurn);
       stageMetrics.turns.push(stageMetrics.currentTurn);
     }
     
+    // Use pending input timestamp if available (input arrived before turn started)
+    const inputTimestamp = pendingInputTimestamp ?? null;
+    pendingInputTimestamp = null; // Clear pending timestamp
+    
     const newTurn: TurnMetrics = {
       turnNumber: stageMetrics.turns.length + 1,
-      startedAt: now,
+      startedAt: inputTimestamp ?? now, // Start from input time if available
       firstChunkAt: null,
+      lastChunkAt: null,
       chunksProcessed: 0,
       totalBytes: 0,
+      firstInputAt: inputTimestamp,
+      ttfc: null,
+      inputToOutputLatency: null,
     };
     stageMetrics.currentTurn = newTurn;
     return newTurn;
+  }
+
+  /**
+   * Finalize latency calculations for a completed turn
+   */
+  function finalizeTurnLatency(turn: TurnMetrics): void {
+    if (turn.inputToOutputLatency !== null) {
+      const latency = turn.inputToOutputLatency;
+      const stats = stageMetrics.latencyStats;
+      
+      stats.samples.push(latency);
+      stats.min = stats.min === null ? latency : Math.min(stats.min, latency);
+      stats.max = stats.max === null ? latency : Math.max(stats.max, latency);
+      stats.avg = stats.samples.reduce((a, b) => a + b, 0) / stats.samples.length;
+      
+      // Calculate percentiles
+      const sorted = [...stats.samples].sort((a, b) => a - b);
+      stats.p50 = percentile(sorted, 50);
+      stats.p95 = percentile(sorted, 95);
+      stats.p99 = percentile(sorted, 99);
+    }
+  }
+
+  /**
+   * Calculate percentile from sorted array
+   */
+  function percentile(sorted: number[], p: number): number {
+    if (sorted.length === 0) return 0;
+    const index = Math.ceil((p / 100) * sorted.length) - 1;
+    return sorted[Math.max(0, Math.min(index, sorted.length - 1))];
   }
 
   const observableReadable = new ReadableStream<O>({
@@ -170,15 +277,30 @@ function createObservableTransform<I, O>(
           }
         }
 
+        // Track inter-chunk latency (time between consecutive chunks)
+        if (stageMetrics.lastChunkAt !== null) {
+          const interChunkLatency = now - stageMetrics.lastChunkAt;
+          stageMetrics.interChunkLatencies.push(interChunkLatency);
+          // Keep only last 100 samples for memory efficiency
+          if (stageMetrics.interChunkLatencies.length > 100) {
+            stageMetrics.interChunkLatencies.shift();
+          }
+          stageMetrics.avgInterChunkLatency = 
+            stageMetrics.interChunkLatencies.reduce((a, b) => a + b, 0) / 
+            stageMetrics.interChunkLatencies.length;
+        }
+
         // Update overall metrics
         stageMetrics.chunksProcessed++;
         stageMetrics.totalBytes += chunkSize;
         stageMetrics.lastChunkAt = now;
+        lastOutputTimestamp = now; // Track for input-side turn detection
         
         // Update turn metrics
         const currentTurn = stageMetrics.currentTurn!;
         currentTurn.chunksProcessed++;
         currentTurn.totalBytes += chunkSize;
+        currentTurn.lastChunkAt = now;
 
         // Track first chunk (overall and per-turn)
         if (stageMetrics.firstChunkAt === null) {
@@ -189,13 +311,38 @@ function createObservableTransform<I, O>(
         if (isFirstChunkOfTurn) {
           currentTurn.firstChunkAt = now;
           const timeToFirstChunk = now - currentTurn.startedAt;
+          currentTurn.ttfc = timeToFirstChunk;
+          
+          // Calculate input-to-output latency if we have input timestamp
+          if (currentTurn.firstInputAt !== null) {
+            currentTurn.inputToOutputLatency = now - currentTurn.firstInputAt;
+          }
+          
           // Clear processing state - we're now outputting
           isProcessing = false;
           if (visualizer) {
             visualizer.onFirstChunk(stageName, currentTurn.turnNumber, timeToFirstChunk, chunkPreview);
+            
+            // Send latency update
+            visualizer.onLatencyUpdate({
+              stageName,
+              turnNumber: currentTurn.turnNumber,
+              ttfc: currentTurn.ttfc,
+              inputToOutput: currentTurn.inputToOutputLatency,
+              interChunkAvg: stageMetrics.avgInterChunkLatency,
+              stats: {
+                min: stageMetrics.latencyStats.min,
+                max: stageMetrics.latencyStats.max,
+                avg: stageMetrics.latencyStats.avg,
+                p50: stageMetrics.latencyStats.p50,
+                p95: stageMetrics.latencyStats.p95,
+                p99: stageMetrics.latencyStats.p99,
+              },
+            });
           } else {
             log(`[Pipeline] Stage "${stageName}" turn #${currentTurn.turnNumber} first chunk`, {
               timeToFirstChunkMs: timeToFirstChunk,
+              inputToOutputMs: currentTurn.inputToOutputLatency,
               chunkSize,
               chunkPreview,
             });
@@ -229,10 +376,6 @@ function createObservableTransform<I, O>(
     },
   });
 
-  // Track if we're waiting for output (processing state)
-  let isProcessing = false;
-  let inputTurnNumber = 1;
-
   const observableWritable = new WritableStream<I>({
     async write(chunk) {
       const startTime = Date.now();
@@ -243,9 +386,25 @@ function createObservableTransform<I, O>(
       
       if (isMeaningfulInput) {
         const chunkPreview = getChunkPreview(chunk);
+        const now = Date.now();
+        
+        // Check if this input is for a NEW turn (idle threshold passed since last output)
+        const timeSinceLastOutput = lastOutputTimestamp > 0 ? now - lastOutputTimestamp : Infinity;
+        const isNewTurnInput = timeSinceLastOutput > turnIdleThreshold;
         
         // Detect turn based on current state
-        inputTurnNumber = stageMetrics.turns.length + 1;
+        inputTurnNumber = stageMetrics.turns.length + (isNewTurnInput ? 1 : 0) + 1;
+        
+        // Track first input timestamp for input-to-output latency
+        if (isNewTurnInput || !stageMetrics.currentTurn) {
+          // This is input for a NEW turn - store as pending
+          if (pendingInputTimestamp === null) {
+            pendingInputTimestamp = now;
+          }
+        } else if (stageMetrics.currentTurn && stageMetrics.currentTurn.firstInputAt === null) {
+          // Same turn, first input
+          stageMetrics.currentTurn.firstInputAt = now;
+        }
         
         // Notify visualizer of input
         if (visualizer) {
@@ -458,5 +617,5 @@ export class LangChainAudioReadableStream<T> extends ReadableStream<T> {
   }
 }
 
-export type { StageMetrics, TurnMetrics, ObservabilityOptions };
+export type { StageMetrics, TurnMetrics, LatencyStats, LatencyData, ObservabilityOptions };
 

@@ -4,7 +4,17 @@
 
 import type { WSContext } from "hono/ws";
 
-import type { StageMetrics } from "./LangChainAudioReadableStream";
+import type { StageMetrics, LatencyData } from "./LangChainAudioReadableStream";
+
+/** Latency stats for a stage */
+interface LatencyStats {
+  min: number | null;
+  max: number | null;
+  avg: number | null;
+  p50: number | null;
+  p95: number | null;
+  p99: number | null;
+}
 
 export type PipelineEvent =
   | { type: "stage_registered"; stageName: string; shortName: string; color: string }
@@ -13,8 +23,17 @@ export type PipelineEvent =
   | { type: "stage_processing"; stageName: string; turnNumber: number }
   | { type: "first_chunk"; stageName: string; turnNumber: number; ttfc: number; chunkPreview?: string }
   | { type: "chunk"; stageName: string; metrics: SerializedStageMetrics; chunkPreview?: string }
+  | { type: "latency_update"; stageName: string; shortName: string; latency: LatencyEventData }
   | { type: "stage_complete"; stageName: string; metrics: SerializedStageMetrics }
   | { type: "pipeline_summary"; stages: SerializedStageMetrics[] };
+
+interface LatencyEventData {
+  turnNumber: number;
+  ttfc: number | null;
+  inputToOutput: number | null;
+  interChunkAvg: number | null;
+  stats: LatencyStats;
+}
 
 interface SerializedStageMetrics {
   name: string;
@@ -178,6 +197,27 @@ export class PipelineVisualizer {
       stageName,
       metrics: this.serializeMetrics(stageName, metrics),
       chunkPreview,
+    });
+  }
+
+  /**
+   * Called when latency data is updated for a stage
+   */
+  onLatencyUpdate(latency: LatencyData): void {
+    const state = this.stages.get(latency.stageName);
+    if (!state) return;
+
+    this.send({
+      type: "latency_update",
+      stageName: latency.stageName,
+      shortName: state.shortName,
+      latency: {
+        turnNumber: latency.turnNumber,
+        ttfc: latency.ttfc,
+        inputToOutput: latency.inputToOutput,
+        interChunkAvg: latency.interChunkAvg,
+        stats: latency.stats,
+      },
     });
   }
 

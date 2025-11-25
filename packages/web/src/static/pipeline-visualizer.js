@@ -87,6 +87,9 @@ class PipelineVisualizer extends HTMLElement {
       case "chunk":
         this.handleChunk(event);
         break;
+      case "latency_update":
+        this.handleLatencyUpdate(event);
+        break;
       case "stage_complete":
         this.handleStageComplete(event);
         break;
@@ -119,6 +122,22 @@ class PipelineVisualizer extends HTMLElement {
       ttfc: null,
       lastChunkPreview: "",
       lastInputPreview: "",
+      // Latency metrics
+      latency: {
+        current: {
+          ttfc: null,
+          inputToOutput: null,
+          interChunkAvg: null,
+        },
+        stats: {
+          min: null,
+          max: null,
+          avg: null,
+          p50: null,
+          p95: null,
+          p99: null,
+        },
+      },
     };
 
     this.stages.set(event.stageName, stage);
@@ -221,6 +240,37 @@ class PipelineVisualizer extends HTMLElement {
     stage.isOutputting = false;
     this.addEvent(stage.shortName, "✓ Completed", stage.color);
     this.renderStages();
+    this.renderEvents();
+  }
+
+  handleLatencyUpdate(event) {
+    const stage = this.stages.get(event.stageName);
+    if (!stage) return;
+
+    const latencyData = event.latency;
+    
+    // Update current latency values
+    stage.latency.current = {
+      ttfc: latencyData.ttfc,
+      inputToOutput: latencyData.inputToOutput,
+      interChunkAvg: latencyData.interChunkAvg,
+    };
+    
+    // Update stats
+    stage.latency.stats = latencyData.stats;
+
+    // Add latency event to log
+    const latencyMs = latencyData.inputToOutput ?? latencyData.ttfc;
+    if (latencyMs !== null) {
+      this.addEvent(
+        stage.shortName,
+        `⏱ Latency: ${latencyMs}ms`,
+        stage.color
+      );
+    }
+
+    this.renderStages();
+    this.renderLatencyPanel();
     this.renderEvents();
   }
 
@@ -802,6 +852,152 @@ class PipelineVisualizer extends HTMLElement {
           margin-bottom: 12px;
           opacity: 0.5;
         }
+
+        /* Latency Panel */
+        .latency-section {
+          background: rgba(0, 0, 0, 0.3);
+          border-radius: 8px;
+          padding: 12px;
+          margin-bottom: 16px;
+        }
+
+        .latency-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 12px;
+        }
+
+        .latency-title {
+          font-size: 11px;
+          color: #71717a;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .latency-title-icon {
+          font-size: 14px;
+        }
+
+        .latency-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+          gap: 10px;
+        }
+
+        .latency-card {
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid rgba(255, 255, 255, 0.06);
+          border-radius: 6px;
+          padding: 10px;
+        }
+
+        .latency-card-header {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          margin-bottom: 8px;
+        }
+
+        .latency-card-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: var(--stage-color);
+        }
+
+        .latency-card-name {
+          font-size: 11px;
+          color: #a1a1aa;
+          text-transform: uppercase;
+        }
+
+        .latency-current {
+          font-size: 20px;
+          font-weight: 600;
+          color: #fafafa;
+          font-variant-numeric: tabular-nums;
+          margin-bottom: 6px;
+        }
+
+        .latency-current.good { color: #22c55e; }
+        .latency-current.warn { color: #eab308; }
+        .latency-current.bad { color: #ef4444; }
+
+        .latency-stats {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 4px;
+          font-size: 10px;
+        }
+
+        .latency-stat {
+          display: flex;
+          flex-direction: column;
+          gap: 1px;
+        }
+
+        .latency-stat-label {
+          color: #52525b;
+          text-transform: uppercase;
+        }
+
+        .latency-stat-value {
+          color: #a1a1aa;
+          font-variant-numeric: tabular-nums;
+        }
+
+        .latency-bar {
+          height: 4px;
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 2px;
+          margin-top: 8px;
+          overflow: hidden;
+        }
+
+        .latency-bar-fill {
+          height: 100%;
+          border-radius: 2px;
+          transition: width 0.3s ease;
+        }
+
+        .e2e-latency {
+          margin-top: 12px;
+          padding-top: 12px;
+          border-top: 1px solid rgba(255, 255, 255, 0.06);
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+
+        .e2e-label {
+          font-size: 11px;
+          color: #71717a;
+          text-transform: uppercase;
+        }
+
+        .e2e-value {
+          font-size: 18px;
+          font-weight: 600;
+          color: #fafafa;
+          font-variant-numeric: tabular-nums;
+        }
+
+        .e2e-breakdown {
+          display: flex;
+          gap: 4px;
+          margin-top: 6px;
+        }
+
+        .e2e-segment {
+          height: 6px;
+          border-radius: 3px;
+          min-width: 20px;
+          transition: width 0.3s ease;
+        }
       </style>
 
       <div class="header">
@@ -822,6 +1018,25 @@ class PipelineVisualizer extends HTMLElement {
       </div>
 
       <div class="metrics-grid" id="metrics-grid"></div>
+
+      <div class="latency-section" id="latency-section">
+        <div class="latency-header">
+          <div class="latency-title">
+            <span class="latency-title-icon">⏱</span>
+            <span>Latency Breakdown</span>
+          </div>
+        </div>
+        <div class="latency-grid" id="latency-grid">
+          <div style="color: #52525b; font-size: 11px;">Waiting for latency data...</div>
+        </div>
+        <div class="e2e-latency" id="e2e-latency" style="display: none;">
+          <div>
+            <div class="e2e-label">End-to-End Latency</div>
+            <div class="e2e-breakdown" id="e2e-breakdown"></div>
+          </div>
+          <div class="e2e-value" id="e2e-value">-</div>
+        </div>
+      </div>
 
       <div class="events-section">
         <div class="events-title">Recent Activity</div>
@@ -956,6 +1171,108 @@ class PipelineVisualizer extends HTMLElement {
       `
       )
       .join("");
+  }
+
+  renderLatencyPanel() {
+    const latencyGridEl = this.shadowRoot.getElementById("latency-grid");
+    const e2eLatencyEl = this.shadowRoot.getElementById("e2e-latency");
+    const e2eValueEl = this.shadowRoot.getElementById("e2e-value");
+    const e2eBreakdownEl = this.shadowRoot.getElementById("e2e-breakdown");
+
+    if (this.stageOrder.length === 0) return;
+
+    // Check if we have any latency data
+    const hasLatencyData = Array.from(this.stages.values()).some(
+      s => s.latency.current.inputToOutput !== null || s.latency.current.ttfc !== null
+    );
+
+    if (!hasLatencyData) {
+      latencyGridEl.innerHTML = '<div style="color: #52525b; font-size: 11px;">Waiting for latency data...</div>';
+      return;
+    }
+
+    // Render individual stage latency cards
+    latencyGridEl.innerHTML = this.stageOrder
+      .map((stageName) => {
+        const stage = this.stages.get(stageName);
+        const latency = stage.latency;
+        const currentLatency = latency.current.inputToOutput ?? latency.current.ttfc;
+        const colorRgb = this.hexToRgb(stage.color);
+
+        // Determine latency quality (thresholds can be adjusted)
+        let qualityClass = "";
+        if (currentLatency !== null) {
+          if (currentLatency < 200) qualityClass = "good";
+          else if (currentLatency < 500) qualityClass = "warn";
+          else qualityClass = "bad";
+        }
+
+        // Calculate bar width based on max latency across stages
+        const maxLatency = Math.max(
+          ...Array.from(this.stages.values())
+            .map(s => s.latency.current.inputToOutput ?? s.latency.current.ttfc ?? 0)
+        );
+        const barWidth = currentLatency && maxLatency > 0 
+          ? Math.min(100, (currentLatency / maxLatency) * 100) 
+          : 0;
+
+        return `
+          <div class="latency-card" style="--stage-color: ${stage.color}; --stage-color-rgb: ${colorRgb};">
+            <div class="latency-card-header">
+              <div class="latency-card-dot"></div>
+              <span class="latency-card-name">${stage.shortName}</span>
+            </div>
+            <div class="latency-current ${qualityClass}">
+              ${currentLatency !== null ? `${currentLatency}ms` : "-"}
+            </div>
+            <div class="latency-stats">
+              <div class="latency-stat">
+                <span class="latency-stat-label">Min</span>
+                <span class="latency-stat-value">${latency.stats.min !== null ? `${latency.stats.min}ms` : "-"}</span>
+              </div>
+              <div class="latency-stat">
+                <span class="latency-stat-label">Avg</span>
+                <span class="latency-stat-value">${latency.stats.avg !== null ? `${Math.round(latency.stats.avg)}ms` : "-"}</span>
+              </div>
+              <div class="latency-stat">
+                <span class="latency-stat-label">P95</span>
+                <span class="latency-stat-value">${latency.stats.p95 !== null ? `${latency.stats.p95}ms` : "-"}</span>
+              </div>
+            </div>
+            <div class="latency-bar">
+              <div class="latency-bar-fill" style="width: ${barWidth}%; background: ${stage.color};"></div>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+
+    // Calculate and render end-to-end latency
+    const stageLatencies = this.stageOrder
+      .map(stageName => {
+        const stage = this.stages.get(stageName);
+        return {
+          name: stage.shortName,
+          color: stage.color,
+          latency: stage.latency.current.inputToOutput ?? stage.latency.current.ttfc ?? 0
+        };
+      })
+      .filter(s => s.latency > 0);
+
+    if (stageLatencies.length > 0) {
+      const totalLatency = stageLatencies.reduce((sum, s) => sum + s.latency, 0);
+      
+      e2eLatencyEl.style.display = "flex";
+      e2eValueEl.textContent = `${totalLatency}ms`;
+      
+      // Render breakdown bar
+      e2eBreakdownEl.innerHTML = stageLatencies
+        .map(s => {
+          const width = (s.latency / totalLatency) * 100;
+          return `<div class="e2e-segment" style="width: ${width}%; background: ${s.color};" title="${s.name}: ${s.latency}ms"></div>`;
+        })
+        .join("");
+    }
   }
 
   hexToRgb(hex) {
