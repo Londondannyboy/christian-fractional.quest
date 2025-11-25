@@ -46,20 +46,22 @@ export interface ThinkingFillerOptions {
   onFillerEmitted?: (phrase: string) => void;
 }
 
-export class ThinkingFillerTransform extends TransformStream<string, string> {
-  private controller: TransformStreamDefaultController<string> | null = null;
-  private timeoutId: ReturnType<typeof setTimeout> | null = null;
-  private intervalId: ReturnType<typeof setInterval> | null = null;
-  private fillersEmittedThisTurn = 0;
-  private isProcessing = false;
-  private hasReceivedResponse = false;
+interface ThinkingFillerState {
+  controller: TransformStreamDefaultController<string> | null;
+  timeoutId: ReturnType<typeof setTimeout> | null;
+  intervalId: ReturnType<typeof setInterval> | null;
+  fillersEmittedThisTurn: number;
+  hasReceivedResponse: boolean;
+}
 
-  private readonly thresholdMs: number;
-  private readonly fillerPhrases: string[];
-  private readonly enabled: boolean;
-  private readonly maxFillersPerTurn: number;
-  private readonly fillerIntervalMs: number;
-  private readonly onFillerEmitted?: (phrase: string) => void;
+export class ThinkingFillerTransform extends TransformStream<string, string> {
+  readonly #thresholdMs: number;
+  readonly #fillerPhrases: string[];
+  readonly #enabled: boolean;
+  readonly #maxFillersPerTurn: number;
+  readonly #fillerIntervalMs: number;
+  readonly #onFillerEmitted?: (phrase: string) => void;
+  readonly #state: ThinkingFillerState;
 
   constructor(options: ThinkingFillerOptions = {}) {
     const {
@@ -77,40 +79,35 @@ export class ThinkingFillerTransform extends TransformStream<string, string> {
       onFillerEmitted,
     } = options;
 
-    // We need to bind methods before calling super() since we reference them
-    const self = {
-      thresholdMs,
-      fillerPhrases,
-      enabled,
-      maxFillersPerTurn,
-      fillerIntervalMs,
-      onFillerEmitted,
-      controller: null as TransformStreamDefaultController<string> | null,
-      timeoutId: null as ReturnType<typeof setTimeout> | null,
-      intervalId: null as ReturnType<typeof setInterval> | null,
+    // Create state object before super() - shared between transformer and class methods
+    const state: ThinkingFillerState = {
+      controller: null,
+      timeoutId: null,
+      intervalId: null,
       fillersEmittedThisTurn: 0,
-      isProcessing: false,
       hasReceivedResponse: false,
+    };
+
+    const clearTimers = () => {
+      if (state.timeoutId) {
+        clearTimeout(state.timeoutId);
+        state.timeoutId = null;
+      }
+      if (state.intervalId) {
+        clearInterval(state.intervalId);
+        state.intervalId = null;
+      }
     };
 
     super({
       start(controller) {
-        self.controller = controller;
+        state.controller = controller;
       },
 
       transform(chunk, controller) {
         // Real text arrived - cancel any pending filler timers
-        if (self.timeoutId) {
-          clearTimeout(self.timeoutId);
-          self.timeoutId = null;
-        }
-        if (self.intervalId) {
-          clearInterval(self.intervalId);
-          self.intervalId = null;
-        }
-
-        self.hasReceivedResponse = true;
-        self.isProcessing = false;
+        clearTimers();
+        state.hasReceivedResponse = true;
 
         // Pass through the actual response
         controller.enqueue(chunk);
@@ -118,27 +115,17 @@ export class ThinkingFillerTransform extends TransformStream<string, string> {
 
       flush() {
         // Clean up any timers on stream close
-        if (self.timeoutId) {
-          clearTimeout(self.timeoutId);
-          self.timeoutId = null;
-        }
-        if (self.intervalId) {
-          clearInterval(self.intervalId);
-          self.intervalId = null;
-        }
+        clearTimers();
       },
     });
 
-    // Store references for external access
-    this.thresholdMs = thresholdMs;
-    this.fillerPhrases = fillerPhrases;
-    this.enabled = enabled;
-    this.maxFillersPerTurn = maxFillersPerTurn;
-    this.fillerIntervalMs = fillerIntervalMs;
-    this.onFillerEmitted = onFillerEmitted;
-
-    // Store self reference for method access
-    (this as unknown as { _self: typeof self })._self = self;
+    this.#state = state;
+    this.#thresholdMs = thresholdMs;
+    this.#fillerPhrases = fillerPhrases;
+    this.#enabled = enabled;
+    this.#maxFillersPerTurn = maxFillersPerTurn;
+    this.#fillerIntervalMs = fillerIntervalMs;
+    this.#onFillerEmitted = onFillerEmitted;
   }
 
   /**
@@ -146,45 +133,33 @@ export class ThinkingFillerTransform extends TransformStream<string, string> {
    * This starts the filler timer.
    */
   notifyProcessingStarted(): void {
-    if (!this.enabled) return;
-
-    const self = (this as unknown as { _self: ReturnType<typeof this.getSelf> })
-      ._self;
+    if (!this.#enabled) return;
 
     // Reset state for new turn
-    self.fillersEmittedThisTurn = 0;
-    self.isProcessing = true;
-    self.hasReceivedResponse = false;
+    this.#state.fillersEmittedThisTurn = 0;
+    this.#state.hasReceivedResponse = false;
 
     // Clear any existing timers
-    if (self.timeoutId) {
-      clearTimeout(self.timeoutId);
-    }
-    if (self.intervalId) {
-      clearInterval(self.intervalId);
-    }
+    this.#clearTimers();
 
     // Start the filler timer
-    self.timeoutId = setTimeout(() => {
-      this.emitFiller(self);
+    this.#state.timeoutId = setTimeout(() => {
+      this.#emitFiller();
 
       // If we can emit more fillers, set up interval
-      if (this.maxFillersPerTurn > 1) {
-        self.intervalId = setInterval(() => {
+      if (this.#maxFillersPerTurn > 1) {
+        this.#state.intervalId = setInterval(() => {
           if (
-            self.fillersEmittedThisTurn < this.maxFillersPerTurn &&
-            !self.hasReceivedResponse
+            this.#state.fillersEmittedThisTurn < this.#maxFillersPerTurn &&
+            !this.#state.hasReceivedResponse
           ) {
-            this.emitFiller(self);
+            this.#emitFiller();
           } else {
-            if (self.intervalId) {
-              clearInterval(self.intervalId);
-              self.intervalId = null;
-            }
+            this.#clearTimers();
           }
-        }, this.fillerIntervalMs);
+        }, this.#fillerIntervalMs);
       }
-    }, this.thresholdMs);
+    }, this.#thresholdMs);
   }
 
   /**
@@ -192,59 +167,43 @@ export class ThinkingFillerTransform extends TransformStream<string, string> {
    * Useful when the user interrupts or the turn is cancelled.
    */
   cancelPendingFiller(): void {
-    const self = (this as unknown as { _self: ReturnType<typeof this.getSelf> })
-      ._self;
-
-    if (self.timeoutId) {
-      clearTimeout(self.timeoutId);
-      self.timeoutId = null;
-    }
-    if (self.intervalId) {
-      clearInterval(self.intervalId);
-      self.intervalId = null;
-    }
-
-    self.isProcessing = false;
+    this.#clearTimers();
   }
 
-  private getSelf() {
-    return (this as unknown as { _self: unknown })._self as {
-      thresholdMs: number;
-      fillerPhrases: string[];
-      enabled: boolean;
-      maxFillersPerTurn: number;
-      fillerIntervalMs: number;
-      onFillerEmitted?: (phrase: string) => void;
-      controller: TransformStreamDefaultController<string> | null;
-      timeoutId: ReturnType<typeof setTimeout> | null;
-      intervalId: ReturnType<typeof setInterval> | null;
-      fillersEmittedThisTurn: number;
-      isProcessing: boolean;
-      hasReceivedResponse: boolean;
-    };
+  #clearTimers(): void {
+    if (this.#state.timeoutId) {
+      clearTimeout(this.#state.timeoutId);
+      this.#state.timeoutId = null;
+    }
+    if (this.#state.intervalId) {
+      clearInterval(this.#state.intervalId);
+      this.#state.intervalId = null;
+    }
   }
 
-  private emitFiller(self: ReturnType<typeof this.getSelf>): void {
+  #emitFiller(): void {
     if (
-      !self.controller ||
-      self.hasReceivedResponse ||
-      self.fillersEmittedThisTurn >= this.maxFillersPerTurn
+      !this.#state.controller ||
+      this.#state.hasReceivedResponse ||
+      this.#state.fillersEmittedThisTurn >= this.#maxFillersPerTurn
     ) {
       return;
     }
 
     // Pick a random filler phrase
     const phrase =
-      this.fillerPhrases[Math.floor(Math.random() * this.fillerPhrases.length)];
+      this.#fillerPhrases[
+        Math.floor(Math.random() * this.#fillerPhrases.length)
+      ];
 
     console.log(`[ThinkingFiller] Emitting filler: "${phrase}"`);
 
     // Emit the filler phrase
-    self.controller.enqueue(phrase);
-    self.fillersEmittedThisTurn++;
+    this.#state.controller.enqueue(phrase);
+    this.#state.fillersEmittedThisTurn++;
 
     // Call the callback if provided
-    this.onFillerEmitted?.(phrase);
+    this.#onFillerEmitted?.(phrase);
   }
 }
 

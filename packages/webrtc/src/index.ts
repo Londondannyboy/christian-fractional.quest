@@ -94,7 +94,7 @@ app.get(
 
     // Create thinking filler transform for more natural conversations
     const fillerTransform = new ThinkingFillerTransform({
-      thresholdMs: 700, // Emit filler if agent takes longer than 1.2s
+      thresholdMs: 1200, // Emit filler if agent takes longer than 1.2s
       fillerPhrases: [
         "Let me see here...",
         "Hmm, one moment...",
