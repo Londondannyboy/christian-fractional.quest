@@ -11,16 +11,22 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "create-voice-agent": "workspace:*",
     "ws": "^8.18.3"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
     "@types/ws": "^8.18.1",
+    "create-voice-agent": "workspace:*",
     "typescript": "~5.9.3"
   },
   "peerDependencies": {
     "create-voice-agent": "workspace:*"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
   }
 }
 
