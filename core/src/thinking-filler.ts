@@ -255,11 +255,10 @@ export function createThinkingFillerMiddleware(
   const transform = new ThinkingFillerTransform(options)
   const notifyTransform = new NotifyOnInputTransform(transform)
 
-  const middleware = createVoiceMiddleware('ThinkingFiller', {
+  return createVoiceMiddleware({
+    name: 'ThinkingFiller',
     afterSTT: [notifyTransform],
     beforeTTS: [transform],
     onSpeechStart: () => transform.cancelPendingFiller(),
   })
-
-  return middleware
 }

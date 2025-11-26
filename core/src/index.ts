@@ -15,10 +15,15 @@ export {
 // Middleware
 export {
   createVoiceMiddleware,
-  combineVoiceMiddleware,
+  combineMiddleware,
   pipeThroughTransforms,
+  isVoiceMiddleware,
   type VoiceMiddleware,
-  type VoiceMiddlewareHooks,
+  type VoiceHooks,
+  type VoiceTransformHooks,
+  type VoiceEventHooks,
+  type CreateVoiceMiddlewareConfig,
+  type CombinedVoiceHooks,
 } from './middleware.js'
 
 // Voice Agent

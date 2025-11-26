@@ -229,7 +229,8 @@ export function createPipelineVisualizerMiddleware(
 ): VoiceMiddleware {
   let colorIndex = 0
 
-  return createVoiceMiddleware('PipelineVisualizer', {
+  return createVoiceMiddleware({
+    name: 'PipelineVisualizer',
     beforeSTT: [createObservableTransform<Buffer>('BeforeSTT', options, colorIndex++)],
     afterSTT: [createObservableTransform<string>('AfterSTT', options, colorIndex++)],
     beforeTTS: [createObservableTransform<string>('BeforeTTS', options, colorIndex++)],

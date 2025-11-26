@@ -6,12 +6,13 @@
 import { HumanMessage } from '@langchain/core/messages'
 import { Command } from '@langchain/langgraph'
 import { createAgent, type CreateAgentParams, type ReactAgent } from 'langchain'
+import type { AgentMiddleware } from 'langchain'
 
 import {
-  combineVoiceMiddleware,
+  combineMiddleware,
   pipeThroughTransforms,
   type VoiceMiddleware,
-  type VoiceMiddlewareHooks,
+  type VoiceHooks,
 } from './middleware.js'
 import { type BaseSpeechToTextModel, type BaseTextToSpeechModel } from './models.js'
 
@@ -19,13 +20,16 @@ import { type BaseSpeechToTextModel, type BaseTextToSpeechModel } from './models
  * Parameters for creating a voice agent.
  * Extends LangChain's CreateAgentParams with voice-specific options.
  */
-export interface CreateVoiceAgentParams extends CreateAgentParams {
+export interface CreateVoiceAgentParams extends Omit<CreateAgentParams, 'middleware'> {
   /** Speech-to-Text model for transcribing user input */
   stt: BaseSpeechToTextModel
   /** Text-to-Speech model for generating audio output */
   tts: BaseTextToSpeechModel
-  /** Optional middleware for customizing the pipeline */
-  middleware?: VoiceMiddleware[]
+  /**
+   * Optional middleware for customizing the pipeline.
+   * Accepts both VoiceMiddleware (with voice hooks) and standard AgentMiddleware from LangChain.
+   */
+  middleware?: Array<VoiceMiddleware<any, any> | AgentMiddleware<any, any, any>>
   /** Callback when an interrupt occurs */
   onInterrupt?: (value: unknown) => void
   /** Callback when the agent calls hang_up tool */
@@ -65,9 +69,25 @@ interface VoiceAgentState {
  *
  * @example
  * ```ts
- * import { createVoiceAgent } from "create-voice-agent";
+ * import { createVoiceAgent, createVoiceMiddleware } from "create-voice-agent";
+ * import { createMiddleware } from "langchain";
  * import { AssemblyAISpeechToText } from "@create-voice-agent/assemblyai";
  * import { ElevenLabsTextToSpeech } from "@create-voice-agent/elevenlabs";
+ *
+ * // Create a voice-specific middleware
+ * const fillerMiddleware = createVoiceMiddleware({
+ *   name: "FillerMiddleware",
+ *   beforeTTS: [myFillerTransform],
+ *   onSpeechStart: () => console.log("Barge-in!"),
+ * });
+ *
+ * // Create a standard LangChain agent middleware
+ * const authMiddleware = createMiddleware({
+ *   name: "AuthMiddleware",
+ *   beforeModel: async (state, runtime, controls) => {
+ *     // authentication logic
+ *   },
+ * });
  *
  * const voiceAgent = createVoiceAgent({
  *   // LangChain agent params
@@ -78,7 +98,10 @@ interface VoiceAgentState {
  *
  *   // Voice-specific params
  *   stt: new AssemblyAISpeechToText({ apiKey: "..." }),
- *   tts: new ElevenLabsTextToSpeech({ apiKey: "...", voiceId: "..." })
+ *   tts: new ElevenLabsTextToSpeech({ apiKey: "...", voiceId: "..." }),
+ *
+ *   // Mix of voice middleware and standard agent middleware
+ *   middleware: [fillerMiddleware, authMiddleware],
  * });
  *
  * const audioOutput = voiceAgent.process(audioInput);
@@ -95,24 +118,29 @@ export function createVoiceAgent(params: CreateVoiceAgentParams): VoiceAgent {
     ...agentParams
   } = params
 
-  // Create the LangChain agent using createAgent()
-  const agent = createAgent(agentParams)
+  // Combine all middleware - separates voice hooks from agent middleware
+  const combinedHooks = middleware.length > 0 ? combineMiddleware(...middleware) : null
+
+  // Create the LangChain agent using createAgent() with the agent middleware
+  const agent = createAgent({
+    ...agentParams,
+    middleware: combinedHooks?.agentMiddleware,
+  })
 
   const state: VoiceAgentState = {
     threadId: crypto.randomUUID(),
     stopped: false,
   }
 
-  // Combine all middleware
-  const hooks =
-    middleware.length > 0 ? combineVoiceMiddleware(...middleware) : ({} as VoiceMiddlewareHooks)
+  // Extract voice hooks (empty object if no middleware)
+  const voiceHooks: VoiceHooks = combinedHooks ?? {}
 
   // Wire middleware event hooks to STT/TTS models
-  if (hooks.onSpeechStart) {
-    stt.addSpeechStartListener(hooks.onSpeechStart)
+  if (voiceHooks.onSpeechStart) {
+    stt.addSpeechStartListener(voiceHooks.onSpeechStart)
   }
-  if (hooks.onAudioComplete) {
-    tts.addAudioCompleteListener(hooks.onAudioComplete)
+  if (voiceHooks.onAudioComplete) {
+    tts.addAudioCompleteListener(voiceHooks.onAudioComplete)
   }
 
   /**
@@ -139,6 +167,9 @@ export function createVoiceAgent(params: CreateVoiceAgentParams): VoiceAgent {
           streamMode: 'messages',
         })
 
+        // Track hang_up request to defer until all text is enqueued
+        let pendingHangUpReason: string | null = null
+
         for await (const [chunk] of graphStream) {
           if (state.stopped) break
 
@@ -156,14 +187,21 @@ export function createVoiceAgent(params: CreateVoiceAgentParams): VoiceAgent {
             }
           }
 
-          // Check for hang_up tool
+          // Check for hang_up tool - defer calling onHangUp until stream completes
           if (chunk && typeof chunk === 'object' && 'name' in chunk) {
             const toolChunk = chunk as { name: string; content: unknown }
-            if (toolChunk.name === 'hang_up' && onHangUp) {
+            if (toolChunk.name === 'hang_up') {
               console.log('[VoiceAgent] Hang up tool called:', toolChunk.content)
-              onHangUp(toolChunk.content as string)
+              pendingHangUpReason = toolChunk.content as string
             }
           }
+        }
+
+        // Call onHangUp after all text is enqueued to TTS
+        // This ensures the actual agent response is queued before signaling hang up
+        if (pendingHangUpReason !== null && onHangUp) {
+          console.log('[VoiceAgent] All text enqueued, signaling hang up:', pendingHangUpReason)
+          onHangUp(pendingHangUpReason)
         }
 
         // Check for interrupts
@@ -200,32 +238,32 @@ export function createVoiceAgent(params: CreateVoiceAgentParams): VoiceAgent {
 
       // Step 1: Apply beforeSTT transforms
       let pipeline: ReadableStream<Buffer> = audioInput
-      if (hooks.beforeSTT && hooks.beforeSTT.length > 0) {
-        pipeline = pipeThroughTransforms(pipeline, hooks.beforeSTT)
+      if (voiceHooks.beforeSTT && voiceHooks.beforeSTT.length > 0) {
+        pipeline = pipeThroughTransforms(pipeline, voiceHooks.beforeSTT)
       }
 
       // Step 2: Speech-to-Text
       let textStream: ReadableStream<string> = pipeline.pipeThrough(stt)
 
       // Step 3: Apply afterSTT transforms
-      if (hooks.afterSTT && hooks.afterSTT.length > 0) {
-        textStream = pipeThroughTransforms(textStream, hooks.afterSTT)
+      if (voiceHooks.afterSTT && voiceHooks.afterSTT.length > 0) {
+        textStream = pipeThroughTransforms(textStream, voiceHooks.afterSTT)
       }
 
       // Step 4: Agent processing
       let agentOutput = textStream.pipeThrough(createAgentTransform())
 
       // Step 5: Apply beforeTTS transforms
-      if (hooks.beforeTTS && hooks.beforeTTS.length > 0) {
-        agentOutput = pipeThroughTransforms(agentOutput, hooks.beforeTTS)
+      if (voiceHooks.beforeTTS && voiceHooks.beforeTTS.length > 0) {
+        agentOutput = pipeThroughTransforms(agentOutput, voiceHooks.beforeTTS)
       }
 
       // Step 6: Text-to-Speech
       let audioOutput: ReadableStream<Buffer> = agentOutput.pipeThrough(tts)
 
       // Step 7: Apply afterTTS transforms
-      if (hooks.afterTTS && hooks.afterTTS.length > 0) {
-        audioOutput = pipeThroughTransforms(audioOutput, hooks.afterTTS)
+      if (voiceHooks.afterTTS && voiceHooks.afterTTS.length > 0) {
+        audioOutput = pipeThroughTransforms(audioOutput, voiceHooks.afterTTS)
       }
 
       return audioOutput
