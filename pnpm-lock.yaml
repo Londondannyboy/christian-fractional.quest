@@ -234,6 +234,61 @@ importers:
         specifier: ~5.9.3
         version: 5.9.3
 
+  packages/twilio:
+    dependencies:
+      '@hono/node-server':
+        specifier: ^1.19.6
+        version: 1.19.6(hono@4.10.6)
+      '@hono/node-ws':
+        specifier: ^1.2.0
+        version: 1.2.0(@hono/node-server@1.19.6(hono@4.10.6))(hono@4.10.6)
+      '@langchain/core':
+        specifier: ^1.0.6
+        version: 1.0.6(openai@6.9.1(ws@8.18.3)(zod@4.1.12))
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
+      '@voice-sandwich-demo/graphs':
+        specifier: workspace:*
+        version: link:../graphs
+      '@voice-sandwich-demo/web':
+        specifier: workspace:*
+        version: link:../web
+      dotenv:
+        specifier: ^17.2.3
+        version: 17.2.3
+      hono:
+        specifier: ^4.10.6
+        version: 4.10.6
+      langchain:
+        specifier: ^1.0.6
+        version: 1.0.6(@langchain/core@1.0.6(openai@6.9.1(ws@8.18.3)(zod@4.1.12)))(openai@6.9.1(ws@8.18.3)(zod@4.1.12))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+      ws:
+        specifier: ^8.18.3
+        version: 8.18.3
+    devDependencies:
+      '@eslint/js':
+        specifier: ^9.39.1
+        version: 9.39.1
+      '@types/node':
+        specifier: ^24.10.1
+        version: 24.10.1
+      eslint:
+        specifier: ^9.39.1
+        version: 9.39.1
+      globals:
+        specifier: ^16.5.0
+        version: 16.5.0
+      tsx:
+        specifier: ^4.20.6
+        version: 4.20.6
+      typescript:
+        specifier: ~5.9.3
+        version: 5.9.3
+      typescript-eslint:
+        specifier: ^8.46.4
+        version: 8.47.0(eslint@9.39.1)(typescript@5.9.3)
+
   packages/web:
     dependencies:
       '@ericedouard/vad-node-realtime':
