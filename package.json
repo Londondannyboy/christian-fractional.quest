@@ -2,8 +2,8 @@
   "name": "voice-sandwich-demo",
   "private": true,
   "scripts": {
-    "build": "pnpm run --filter=\"./packages/[^_]**\" build",
-    "watch": "pnpm build && pnpm run --filter=\"./packages/[^_]**\" --parallel build --watch",
+    "build": "pnpm run --filter=\"create-voice-agent\" --filter=\"./provider/[^_]**\" build",
+    "watch": "pnpm build && pnpm run --filter=\"create-voice-agent\" --filter=\"./provider/[^_]**\" --parallel build --watch",
     "clean": "git clean -fdX .",
     "clean:build": "git clean -fdx -e node_modules .",
     "format": "prettier --write .",

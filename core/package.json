@@ -1,0 +1,30 @@
+{
+  "name": "create-voice-agent",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Core building blocks for voice agents with LangChain",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./src/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@langchain/core": "^1.0.6",
+    "@langchain/langgraph": "^1.0.2",
+    "langchain": "^1.0.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "~5.9.3"
+  },
+  "peerDependencies": {
+    "@langchain/core": "^1.0.0",
+    "@langchain/langgraph": "^1.0.0"
+  }
+}
+

@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Sandwich Demo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; }
+        
+        :root {
+            --bg-warm: #faf8f5;
+            --bg-card: #ffffff;
+            --accent-mustard: #d4a853;
+            --accent-olive: #6b7c5e;
+            --accent-tomato: #c94c4c;
+            --text-primary: #2d2a26;
+            --text-secondary: #6b6560;
+            --text-muted: #9c9590;
+            --border-subtle: #e8e4de;
+            --shadow-soft: 0 2px 16px rgba(45, 42, 38, 0.06);
+            --shadow-hover: 0 4px 24px rgba(45, 42, 38, 0.1);
+        }
+        
+        body {
+            font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            margin: 0;
+            padding: 24px;
+            background: var(--bg-warm);
+            background-image: 
+                radial-gradient(ellipse at 0% 0%, rgba(212, 168, 83, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 100% 100%, rgba(107, 124, 94, 0.08) 0%, transparent 50%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .container {
+            max-width: 520px;
+            width: 100%;
+        }
+        
+        .panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 20px;
+            padding: 36px;
+            box-shadow: var(--shadow-soft);
+        }
+        
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 6px;
+        }
+        
+        .logo {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, var(--accent-mustard), #e8c77a);
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            box-shadow: 0 2px 8px rgba(212, 168, 83, 0.25);
+        }
+        
+        h1 { 
+            margin: 0;
+            font-size: 26px;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: -0.5px;
+        }
+        
+        .subtitle {
+            color: var(--text-secondary);
+            margin: 0 0 28px 0;
+            font-size: 15px;
+        }
+        
+        /* Provider Selection */
+        .provider-section {
+            margin-bottom: 24px;
+        }
+        
+        .section-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .section-label::before {
+            content: '';
+            width: 3px;
+            height: 12px;
+            border-radius: 2px;
+        }
+        
+        .section-label.stt::before {
+            background: var(--accent-olive);
+        }
+        
+        .section-label.tts::before {
+            background: var(--accent-mustard);
+        }
+        
+        .provider-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 10px;
+        }
+        
+        .provider-option {
+            position: relative;
+        }
+        
+        .provider-option input {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        .provider-option label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 14px;
+            background: var(--bg-warm);
+            border: 2px solid transparent;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .provider-option label:hover {
+            background: #f5f2ed;
+        }
+        
+        .provider-option input:checked + label {
+            background: #fff;
+            border-color: var(--accent-olive);
+            box-shadow: 0 2px 8px rgba(107, 124, 94, 0.12);
+        }
+        
+        .provider-option.tts-option input:checked + label {
+            border-color: var(--accent-mustard);
+            box-shadow: 0 2px 8px rgba(212, 168, 83, 0.15);
+        }
+        
+        .provider-option input:disabled + label {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+        
+        .provider-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 600;
+            background: #e8e4de;
+            color: var(--text-secondary);
+        }
+        
+        .provider-option input:checked + label .provider-icon {
+            background: var(--accent-olive);
+            color: white;
+        }
+        
+        .provider-option.tts-option input:checked + label .provider-icon {
+            background: var(--accent-mustard);
+            color: white;
+        }
+        
+        .provider-name {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+        
+        .provider-unavailable {
+            font-size: 10px;
+            color: var(--accent-tomato);
+            margin-top: 2px;
+        }
+        
+        /* Divider */
+        .divider {
+            height: 1px;
+            background: var(--border-subtle);
+            margin: 24px 0;
+        }
+        
+        /* Buttons */
+        .button-group {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        
+        button {
+            padding: 14px 22px;
+            font-size: 15px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            border-radius: 12px;
+            transition: all 0.2s ease;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        #startBtn { 
+            background: linear-gradient(135deg, var(--accent-olive), #5a6b4f);
+            color: #fff;
+            border: none;
+            box-shadow: 0 2px 12px rgba(107, 124, 94, 0.3);
+        }
+        
+        #startBtn:hover:not(:disabled) { 
+            transform: translateY(-1px);
+            box-shadow: 0 4px 16px rgba(107, 124, 94, 0.35);
+        }
+        
+        #startBtn:active:not(:disabled) {
+            transform: translateY(0);
+        }
+        
+        #startBtn:disabled { 
+            background: #d1d0ce;
+            color: #a3a19e;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+        
+        #stopBtn { 
+            background: #fff;
+            color: var(--accent-tomato);
+            border: 2px solid #f5d5d5;
+        }
+        
+        #stopBtn:hover:not(:disabled) { 
+            background: #fef7f7;
+            border-color: #f0bebe;
+        }
+        
+        #stopBtn:disabled { 
+            background: #fafafa;
+            color: #c4c2c0;
+            border-color: #e8e6e4;
+            cursor: not-allowed;
+        }
+        
+        /* Status */
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px 18px;
+            background: var(--bg-warm);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+        
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #c4c2c0;
+            flex-shrink: 0;
+        }
+        
+        .status-dot.connected { 
+            background: var(--accent-olive);
+            box-shadow: 0 0 0 3px rgba(107, 124, 94, 0.15);
+        }
+        
+        .status-dot.recording {
+            background: var(--accent-tomato);
+            animation: pulse 1.5s infinite;
+            box-shadow: 0 0 0 3px rgba(201, 76, 76, 0.15);
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(0.95); }
+        }
+        
+        .status-text {
+            font-size: 14px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+        
+        .status-providers {
+            margin-left: auto;
+            display: flex;
+            gap: 6px;
+        }
+        
+        .provider-badge {
+            font-size: 10px;
+            font-weight: 600;
+            padding: 4px 8px;
+            border-radius: 6px;
+            background: #e8e4de;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        
+        .provider-badge.stt {
+            background: rgba(107, 124, 94, 0.12);
+            color: var(--accent-olive);
+        }
+        
+        .provider-badge.tts {
+            background: rgba(212, 168, 83, 0.15);
+            color: #b08d3a;
+        }
+        
+        /* Activity Log */
+        .log-header {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 10px;
+        }
+        
+        .log {
+            background: var(--bg-warm);
+            border: 1px solid var(--border-subtle);
+            padding: 14px;
+            height: 180px;
+            overflow-y: auto;
+            border-radius: 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        
+        .log div {
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(0,0,0,0.04);
+            line-height: 1.5;
+        }
+        
+        .log div:last-child { 
+            border-bottom: none; 
+        }
+        
+        .log .timestamp {
+            color: var(--text-muted);
+            margin-right: 8px;
+        }
+        
+        /* Loading state */
+        .loading-providers {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+        
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--border-subtle);
+            border-top-color: var(--accent-olive);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 10px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="panel">
+            <div class="header">
+                <div class="logo">🥪</div>
+                <h1>Voice Sandwich</h1>
+            </div>
+            <p class="subtitle">Order a sandwich using your voice</p>
+            
+            <!-- Provider Selection -->
+            <div class="provider-section" id="sttSection">
+                <div class="section-label stt">Speech Recognition</div>
+                <div class="provider-grid" id="sttProviders">
+                    <div class="loading-providers">
+                        <div class="spinner"></div>
+                        Loading providers...
+                    </div>
+                </div>
+            </div>
+            
+            <div class="provider-section" id="ttsSection">
+                <div class="section-label tts">Voice Synthesis</div>
+                <div class="provider-grid" id="ttsProviders">
+                    <div class="loading-providers">
+                        <div class="spinner"></div>
+                        Loading providers...
+                    </div>
+                </div>
+            </div>
+            
+            <div class="divider"></div>
+            
+            <div class="button-group">
+                <button id="startBtn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                        <line x1="12" x2="12" y1="19" y2="22"/>
+                    </svg>
+                    Start Call
+                </button>
+                <button id="stopBtn" disabled>End Call</button>
+            </div>
+            
+            <div class="status-bar">
+                <span class="status-dot" id="statusDot"></span>
+                <span class="status-text" id="status">Ready to take your order</span>
+                <div class="status-providers" id="statusProviders"></div>
+            </div>
+            
+            <div class="log-header">Activity</div>
+            <div class="log" id="log"></div>
+        </div>
+    </div>
+
+    <script>
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const statusDiv = document.getElementById('status');
+        const statusDot = document.getElementById('statusDot');
+        const statusProviders = document.getElementById('statusProviders');
+        const logDiv = document.getElementById('log');
+        const sttProvidersDiv = document.getElementById('sttProviders');
+        const ttsProvidersDiv = document.getElementById('ttsProviders');
+        
+        let signalingWs, peerConnection, audioDataChannel;
+        let audioContext, workletNode, mediaStream;
+        let nextStartTime = 0;
+        let scheduledAudioSources = [];
+        
+        // Selected providers
+        let selectedSTT = 'assemblyai';
+        let selectedTTS = 'elevenlabs';
+        
+        // Provider icon mapping
+        const providerIcons = {
+            assemblyai: 'A',
+            openai: 'O',
+            elevenlabs: 'E',
+            hume: 'H'
+        };
+
+        function log(msg) {
+            const p = document.createElement('div');
+            const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+            p.innerHTML = `<span class="timestamp">${time}</span>${msg}`;
+            logDiv.appendChild(p);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function setStatus(text, state = 'idle') {
+            statusDiv.innerText = text;
+            statusDot.className = 'status-dot';
+            if (state === 'connected') statusDot.classList.add('connected');
+            if (state === 'recording') statusDot.classList.add('recording');
+        }
+        
+        function updateProviderBadges() {
+            const sttLabel = document.querySelector(`input[name="stt"]:checked`)?.nextElementSibling?.querySelector('.provider-name')?.textContent || selectedSTT;
+            const ttsLabel = document.querySelector(`input[name="tts"]:checked`)?.nextElementSibling?.querySelector('.provider-name')?.textContent || selectedTTS;
+            
+            statusProviders.innerHTML = `
+                <span class="provider-badge stt">${sttLabel}</span>
+                <span class="provider-badge tts">${ttsLabel}</span>
+            `;
+        }
+        
+        // Load available providers from server
+        async function loadProviders() {
+            try {
+                const response = await fetch('/api/providers');
+                const providers = await response.json();
+                
+                renderProviders('stt', providers.stt, sttProvidersDiv);
+                renderProviders('tts', providers.tts, ttsProvidersDiv);
+                
+                // Set defaults based on availability
+                const availableSTT = providers.stt.find(p => p.available);
+                const availableTTS = providers.tts.find(p => p.available);
+                
+                if (availableSTT) selectedSTT = availableSTT.id;
+                if (availableTTS) selectedTTS = availableTTS.id;
+                
+                updateProviderBadges();
+            } catch (error) {
+                console.error('Failed to load providers:', error);
+                sttProvidersDiv.innerHTML = '<div class="loading-providers">Failed to load providers</div>';
+                ttsProvidersDiv.innerHTML = '<div class="loading-providers">Failed to load providers</div>';
+            }
+        }
+        
+        function renderProviders(type, providers, container) {
+            container.innerHTML = providers.map((provider, index) => {
+                const isSelected = (type === 'stt' && provider.id === selectedSTT) || 
+                                   (type === 'tts' && provider.id === selectedTTS);
+                const optionClass = type === 'tts' ? 'provider-option tts-option' : 'provider-option';
+                
+                return `
+                    <div class="${optionClass}">
+                        <input type="radio" 
+                               name="${type}" 
+                               id="${type}-${provider.id}" 
+                               value="${provider.id}"
+                               ${isSelected ? 'checked' : ''}
+                               ${!provider.available ? 'disabled' : ''}>
+                        <label for="${type}-${provider.id}">
+                            <div class="provider-icon">${providerIcons[provider.id] || provider.id[0].toUpperCase()}</div>
+                            <div>
+                                <div class="provider-name">${provider.name}</div>
+                                ${!provider.available ? '<div class="provider-unavailable">API key missing</div>' : ''}
+                            </div>
+                        </label>
+                    </div>
+                `;
+            }).join('');
+            
+            // Add event listeners
+            container.querySelectorAll('input[type="radio"]').forEach(input => {
+                input.addEventListener('change', (e) => {
+                    if (type === 'stt') {
+                        selectedSTT = e.target.value;
+                    } else {
+                        selectedTTS = e.target.value;
+                    }
+                    updateProviderBadges();
+                    log(`Selected ${type.toUpperCase()}: ${e.target.value}`);
+                });
+            });
+        }
+        
+        // Initialize
+        loadProviders();
+
+        const workletCode = `
+            class PCMProcessor extends AudioWorkletProcessor {
+                constructor() {
+                    super();
+                    this.buffer = [];
+                    this.resampleRatio = sampleRate / 16000;
+                    this.resampleIndex = 0;
+                }
+                process(inputs) {
+                    const input = inputs[0];
+                    if (!input || !input[0]) return true;
+                    const channelData = input[0];
+                    for (let i = 0; i < channelData.length; i++) {
+                        this.resampleIndex += 1;
+                        if (this.resampleIndex >= this.resampleRatio) {
+                            this.resampleIndex -= this.resampleRatio;
+                            let sample = Math.max(-1, Math.min(1, channelData[i]));
+                            const int16 = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+                            this.buffer.push(int16);
+                        }
+                    }
+                    const CHUNK_SIZE = 1600;
+                    while (this.buffer.length >= CHUNK_SIZE) {
+                        const chunk = this.buffer.splice(0, CHUNK_SIZE);
+                        const int16Array = new Int16Array(chunk);
+                        this.port.postMessage(int16Array.buffer, [int16Array.buffer]);
+                    }
+                    return true;
+                }
+            }
+            registerProcessor('pcm-processor', PCMProcessor);
+        `;
+
+        async function setupAudioWorklet() {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const blob = new Blob([workletCode], { type: 'application/javascript' });
+            const workletUrl = URL.createObjectURL(blob);
+            await audioContext.audioWorklet.addModule(workletUrl);
+            URL.revokeObjectURL(workletUrl);
+        }
+
+        async function setupMicrophone() {
+            if (!audioContext) await setupAudioWorklet();
+            if (audioContext.state === 'suspended') await audioContext.resume();
+
+            mediaStream = await navigator.mediaDevices.getUserMedia({ 
+                audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+            });
+            log('Microphone active');
+            
+            const source = audioContext.createMediaStreamSource(mediaStream);
+            workletNode = new AudioWorkletNode(audioContext, 'pcm-processor');
+            workletNode.port.onmessage = (event) => {
+                if (audioDataChannel?.readyState === 'open') {
+                    audioDataChannel.send(event.data);
+                }
+            };
+            source.connect(workletNode);
+        }
+
+        function clearAudioBuffer() {
+            for (const source of scheduledAudioSources) {
+                try { source.stop(); } catch {}
+            }
+            scheduledAudioSources = [];
+            nextStartTime = 0;
+        }
+
+        function handleIncomingAudio(data) {
+            if (!(data instanceof ArrayBuffer)) return;
+            (async () => {
+                if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioContext.state === 'suspended') await audioContext.resume();
+
+                let buffer = data;
+                if (buffer.byteLength % 2 !== 0) buffer = buffer.slice(0, buffer.byteLength - 1);
+                
+                const int16Data = new Int16Array(buffer);
+                const float32Data = new Float32Array(int16Data.length);
+                for (let i = 0; i < int16Data.length; i++) {
+                    float32Data[i] = int16Data[i] / 32768.0;
+                }
+
+                const audioBuffer = audioContext.createBuffer(1, float32Data.length, 16000);
+                audioBuffer.getChannelData(0).set(float32Data);
+
+                const source = audioContext.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(audioContext.destination);
+
+                const now = audioContext.currentTime;
+                let startTime = nextStartTime < now ? now + 0.05 : nextStartTime;
+                source.start(startTime);
+                nextStartTime = startTime + audioBuffer.duration;
+                
+                scheduledAudioSources.push(source);
+                source.onended = () => {
+                    const idx = scheduledAudioSources.indexOf(source);
+                    if (idx > -1) scheduledAudioSources.splice(idx, 1);
+                };
+            })();
+        }
+
+        function handleDataChannelMessage(data) {
+            if (data instanceof ArrayBuffer) {
+                handleIncomingAudio(data);
+            } else if (typeof data === 'string') {
+                try {
+                    const message = JSON.parse(data);
+                    if (message.type === 'clear-audio') clearAudioBuffer();
+                    if (message.type === 'call-ended') {
+                        log(`Call ended: ${message.reason}`);
+                        stopBtn.click();
+                    }
+                } catch {}
+            }
+        }
+
+        startBtn.onclick = async () => {
+            setStatus('Connecting...', 'idle');
+            startBtn.disabled = true;
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            signalingWs = new WebSocket(`${protocol}//${window.location.host}/ws/signaling`);
+            
+            signalingWs.onopen = async () => {
+                log('Connected to server');
+                
+                // Send provider configuration first
+                signalingWs.send(JSON.stringify({
+                    type: 'configure-providers',
+                    sttProvider: selectedSTT,
+                    ttsProvider: selectedTTS
+                }));
+                
+                peerConnection = new RTCPeerConnection({
+                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                });
+                
+                peerConnection.onicecandidate = (event) => {
+                    if (event.candidate && signalingWs.readyState === WebSocket.OPEN) {
+                        signalingWs.send(JSON.stringify({ type: 'ice-candidate', candidate: event.candidate }));
+                    }
+                };
+                
+                peerConnection.onconnectionstatechange = () => {
+                    if (peerConnection.connectionState === 'connected') {
+                        setStatus('Listening...', 'recording');
+                    } else if (['disconnected', 'failed'].includes(peerConnection.connectionState)) {
+                        setStatus('Disconnected', 'idle');
+                        resetUI();
+                    }
+                };
+                
+                audioDataChannel = peerConnection.createDataChannel('audio', { ordered: true });
+                audioDataChannel.binaryType = 'arraybuffer';
+                
+                audioDataChannel.onopen = async () => {
+                    log(`Ready! Using ${selectedSTT.toUpperCase()} for speech, ${selectedTTS.toUpperCase()} for voice`);
+                    stopBtn.disabled = false;
+                    await setupMicrophone();
+                };
+                
+                audioDataChannel.onmessage = (event) => handleDataChannelMessage(event.data);
+                
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                signalingWs.send(JSON.stringify({ type: 'offer', sdp: peerConnection.localDescription }));
+            };
+            
+            signalingWs.onmessage = async (event) => {
+                const message = JSON.parse(event.data);
+                if (message.type === 'answer') {
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(message.sdp));
+                } else if (message.type === 'ice-candidate' && message.candidate) {
+                    await peerConnection.addIceCandidate(message.candidate);
+                } else if (message.type === 'providers-configured') {
+                    log(`Providers configured: STT=${message.providers.sttProvider}, TTS=${message.providers.ttsProvider}`);
+                }
+            };
+
+            signalingWs.onclose = () => {
+                log('Disconnected');
+                setStatus('Disconnected', 'idle');
+                resetUI();
+            };
+        };
+
+        stopBtn.onclick = () => {
+            log('Ending call...');
+            workletNode?.disconnect();
+            mediaStream?.getTracks().forEach(track => track.stop());
+            audioDataChannel?.close();
+            peerConnection?.close();
+            signalingWs?.close();
+            resetUI();
+        };
+
+        function resetUI() {
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            setStatus('Ready to take your order', 'idle');
+        }
+    </script>
+</body>
+</html>

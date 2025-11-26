@@ -1,0 +1,25 @@
+{
+  "name": "@create-voice-agent/openai",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "OpenAI Speech-to-Text and Text-to-Speech integration for voice agents",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "create-voice-agent": "workspace:*",
+    "openai": "^6.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "~5.9.3"
+  },
+  "peerDependencies": {
+    "create-voice-agent": "workspace:*"
+  }
+}
+
