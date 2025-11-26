@@ -15,7 +15,7 @@ pnpm add @create-voice-agent/openai
 ## Quick Start
 
 ```typescript
-import { createVoiceAgent, VADBufferTransform, createVoiceMiddleware } from "create-voice-agent";
+import { createVoiceAgent } from "create-voice-agent";
 import { OpenAISpeechToText, OpenAITextToSpeech } from "@create-voice-agent/openai";
 
 const voiceAgent = createVoiceAgent({
@@ -23,19 +23,14 @@ const voiceAgent = createVoiceAgent({
   
   stt: new OpenAISpeechToText({
     apiKey: process.env.OPENAI_API_KEY!,
+    // Built-in VAD automatically buffers audio until speech ends
+    partialTranscripts: true,  // See partial results as user speaks
   }),
   
   tts: new OpenAITextToSpeech({
     apiKey: process.env.OPENAI_API_KEY!,
     voice: "nova",
   }),
-  
-  // Recommended: Use VAD to buffer audio for Whisper
-  middleware: [
-    createVoiceMiddleware("VAD", {
-      beforeSTT: [new VADBufferTransform()],
-    }),
-  ],
 });
 ```
 
@@ -43,9 +38,16 @@ const voiceAgent = createVoiceAgent({
 
 ### `OpenAISpeechToText`
 
-Batch-based Speech-to-Text using OpenAI's Whisper model.
+Speech-to-Text using OpenAI's Whisper model with **built-in VAD** (Voice Activity Detection).
 
-> ⚠️ **Note:** Whisper is **not a streaming model**. Audio is transcribed in batches. For real-time applications, use `VADBufferTransform` to buffer audio until speech ends, then send complete utterances to Whisper.
+> ✅ **No external VAD required!** Unlike raw Whisper, this implementation includes energy-based VAD that automatically buffers audio and detects speech boundaries.
+
+This implementation automatically:
+
+- Buffers audio until speech ends (using energy-based VAD)
+- Only triggers `onSpeechStart` when actual speech is detected
+- Provides partial transcriptions as you speak
+- Filters out echo/noise from TTS playback
 
 ```typescript
 import { OpenAISpeechToText } from "@create-voice-agent/openai";
@@ -54,8 +56,12 @@ const stt = new OpenAISpeechToText({
   apiKey: process.env.OPENAI_API_KEY!,
   model: "whisper-1",
   
-  // Callback when processing starts
-  onSpeechStart: () => console.log("Processing audio..."),
+  // Callback when speech is detected (for barge-in)
+  onSpeechStart: () => console.log("User started speaking..."),
+  
+  // Enable real-time partial transcriptions
+  partialTranscripts: true,
+  partialIntervalMs: 1000,
 });
 ```
 
@@ -66,37 +72,46 @@ const stt = new OpenAISpeechToText({
 | `apiKey` | `string` | **required** | OpenAI API key |
 | `model` | `string` | `"whisper-1"` | Whisper model ID |
 | `sampleRate` | `number` | `16000` | Input audio sample rate |
-| `onSpeechStart` | `() => void` | - | Callback when transcription starts |
+| `onSpeechStart` | `() => void` | - | Callback when VAD detects speech start |
+| `minAudioDurationMs` | `number` | `500` | Minimum audio duration to transcribe (filters noise) |
+| `vadEnergyThreshold` | `number` | `500` | Energy threshold for speech detection |
+| `vadSilenceFrames` | `number` | `15` | Silence frames (~480ms) before speech end |
+| `partialTranscripts` | `boolean` | `true` | Enable partial transcriptions during speech |
+| `partialIntervalMs` | `number` | `1000` | Interval between partial transcription requests |
 
-### Using with VAD
+### Partial Transcriptions
 
-For real-time voice applications, combine Whisper with Voice Activity Detection:
+When `partialTranscripts` is enabled, you'll see real-time transcriptions in the logs as the user speaks:
+
+```txt
+OpenAI STT [VAD]: Speech started (energy: 1523, threshold: 500)
+OpenAI STT [buffering]: 1.00s | 32.0KB | energy: avg=2654, peak=5234
+OpenAI STT [partial]: "I would like a" (1.05s)
+OpenAI STT [buffering]: 2.00s | 64.0KB | energy: avg=2298, peak=5234
+OpenAI STT [partial]: "I would like a turkey sandwich" (2.10s)
+OpenAI STT [VAD]: Speech ended | duration: 2.85s | size: 91.2KB
+OpenAI STT [transcribed]: "I would like a turkey sandwich with cheese" | audio: 2.85s | latency: 312ms
+```
+
+> **Note:** Partial transcripts use additional Whisper API calls. Set `partialTranscripts: false` to disable and reduce API costs.
+
+### VAD Tuning
+
+The built-in VAD can be tuned for different environments:
 
 ```typescript
-import { 
-  createVoiceAgent, 
-  VADBufferTransform, 
-  createVoiceMiddleware 
-} from "create-voice-agent";
-import { OpenAISpeechToText } from "@create-voice-agent/openai";
-
-// VAD buffers audio until speech ends, then sends to Whisper
-const vadMiddleware = createVoiceMiddleware("VAD", {
-  beforeSTT: [
-    new VADBufferTransform({
-      sampleRate: 16000,
-      minSpeechFrames: 4,
-      onSpeechEnd: (audio) => console.log(`Buffered ${audio.length} bytes`),
-    }),
-  ],
-});
-
-const voiceAgent = createVoiceAgent({
-  stt: new OpenAISpeechToText({
-    apiKey: process.env.OPENAI_API_KEY!,
-  }),
-  // ...
-  middleware: [vadMiddleware],
+const stt = new OpenAISpeechToText({
+  apiKey: process.env.OPENAI_API_KEY!,
+  
+  // For noisy environments - increase thresholds
+  vadEnergyThreshold: 800,      // Higher = less sensitive
+  minAudioDurationMs: 700,      // Longer minimum to filter noise
+  vadSilenceFrames: 20,         // ~640ms silence before end
+  
+  // For quiet environments - decrease thresholds
+  vadEnergyThreshold: 300,      // Lower = more sensitive
+  minAudioDurationMs: 300,      // Shorter minimum
+  vadSilenceFrames: 10,         // ~320ms silence before end
 });
 ```
 
@@ -194,6 +209,7 @@ const tts = new OpenAITextToSpeech({
 ### STT Input
 
 OpenAI Whisper expects audio in common formats. This integration:
+
 - Accepts raw PCM (16-bit, mono, 16kHz)
 - Automatically wraps in WAV headers before sending to the API
 
@@ -216,8 +232,6 @@ const mp3DecoderMiddleware = createVoiceMiddleware("MP3Decoder", {
 import { 
   createVoiceAgent, 
   createThinkingFillerMiddleware,
-  VADBufferTransform,
-  createVoiceMiddleware,
 } from "create-voice-agent";
 import { OpenAISpeechToText, OpenAITextToSpeech } from "@create-voice-agent/openai";
 import { ChatOpenAI } from "@langchain/openai";
@@ -232,11 +246,12 @@ const tts = new OpenAITextToSpeech({
 const stt = new OpenAISpeechToText({
   apiKey: process.env.OPENAI_API_KEY!,
   model: "whisper-1",
-});
-
-// Use VAD for buffering audio before sending to Whisper
-const vadMiddleware = createVoiceMiddleware("VAD", {
-  beforeSTT: [new VADBufferTransform({ sampleRate: 16000 })],
+  // Built-in VAD handles buffering automatically
+  partialTranscripts: true,
+  onSpeechStart: () => {
+    // Barge-in: interrupt TTS when user starts speaking
+    tts.interrupt();
+  },
 });
 
 const voiceAgent = createVoiceAgent({
@@ -247,7 +262,6 @@ const voiceAgent = createVoiceAgent({
   tts,
   
   middleware: [
-    vadMiddleware,
     createThinkingFillerMiddleware({ thresholdMs: 1500 }),
   ],
 });
@@ -258,14 +272,16 @@ const audioOutput = voiceAgent.process(audioInputStream);
 
 ## When to Use OpenAI vs Other Providers
 
-### Use OpenAI When:
+### Use OpenAI When
+
 - You want a single API key for STT, TTS, and LLM
-- Batch transcription latency is acceptable
 - You need high-accuracy transcription (Whisper is excellent)
+- You want built-in VAD and partial transcription support
 - MP3 output format works for your use case
 
-### Consider Alternatives When:
-- You need real-time streaming STT → Use [AssemblyAI](../assemblyai/README.md)
+### Consider Alternatives When
+
+- You need lower-latency streaming STT → Use [AssemblyAI](../assemblyai/README.md)
 - You need PCM output or more voice options → Use [ElevenLabs](../elevenlabs/README.md)
 - You need emotionally expressive voices → Use [Hume](../hume/README.md)
 
