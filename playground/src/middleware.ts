@@ -1,4 +1,4 @@
-import { createThinkingFillerMiddleware } from '../../core/src/index.js'
+import { createThinkingFillerMiddleware } from 'create-voice-agent'
 
 export const fillerMiddleware = createThinkingFillerMiddleware({
   thresholdMs: 1200,

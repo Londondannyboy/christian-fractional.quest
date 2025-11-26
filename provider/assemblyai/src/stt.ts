@@ -11,7 +11,7 @@
 import querystring from 'querystring'
 
 import { BaseSpeechToTextModel, type SpeechToTextModelParams } from 'create-voice-agent'
-import WebSocket from 'ws'
+import { WebSocket } from 'ws'
 
 /**
  * Audio encoding formats supported by AssemblyAI streaming API

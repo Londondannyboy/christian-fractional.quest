@@ -5,7 +5,7 @@
  * Output: PCM audio buffer (16-bit, mono, resampled to target rate)
  */
 
-import WebSocket from 'ws'
+import { WebSocket } from 'ws'
 import { BaseTextToSpeechModel, type TextToSpeechModelParams } from 'create-voice-agent'
 
 export interface HumeOptions extends TextToSpeechModelParams {
