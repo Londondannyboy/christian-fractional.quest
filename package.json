@@ -2,8 +2,14 @@
   "name": "voice-sandwich-demo",
   "private": true,
   "scripts": {
-    "build": "pnpm run --recursive --parallel build",
+    "build": "run-s build:*",
+    "build:core": "pnpm run --filter=create-voice-agent build",
+    "build:provider": "pnpm run --filter=\"./provider/**\" --parallel build",
+    "build:playground": "pnpm run --filter=@create-voice-agent/playground build",
     "watch": "pnpm build && pnpm run --parallel build --watch",
+    "watch:core": "pnpm run --filter=create-voice-agent build --watch",
+    "watch:provider": "pnpm run --filter=\"./provider/**\" build --watch",
+    "watch:playground": "pnpm run --filter=@create-voice-agent/playground build --watch",
     "format": "oxfmt",
     "format:check": "oxfmt --check .",
     "lint": "oxlint .",
@@ -11,7 +17,8 @@
   },
   "devDependencies": {
     "oxfmt": "^0.15.0",
-    "oxlint": "^0.15.0"
+    "oxlint": "^0.15.0",
+    "npm-run-all2": "^8.0.4"
   },
   "packageManager": "pnpm@10.22.0",
   "engines": {
