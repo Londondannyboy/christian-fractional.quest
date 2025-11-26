@@ -6,7 +6,7 @@
  * Output: PCM audio buffer (16-bit, mono, 16kHz)
  */
 
-import { BaseTextToSpeechModel, type TextToSpeechModelParams } from 'create-voice-agent'
+import { BaseTextToSpeechModel, type TextToSpeechModelParams } from '../../../core/src/index.js'
 
 /**
  * Voice settings for controlling speech characteristics.

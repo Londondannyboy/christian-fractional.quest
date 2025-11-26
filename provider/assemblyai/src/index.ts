@@ -1,6 +1,6 @@
 /**
  * @voice-sandwich-demo/assemblyai
- * 
+ *
  * AssemblyAI Real-Time Speech-to-Text integration for voice agents.
  */
 
@@ -13,5 +13,4 @@ export {
   type AssemblyAIWord,
   type AssemblyAITurnEvent,
   type AssemblyAISessionConfig,
-} from "./stt.js";
-
+} from './stt.js'

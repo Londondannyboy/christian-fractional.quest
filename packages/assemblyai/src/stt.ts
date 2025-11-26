@@ -10,7 +10,7 @@
 
 import querystring from 'querystring'
 
-import { BaseSpeechToTextModel, type SpeechToTextModelParams } from 'create-voice-agent'
+import { BaseSpeechToTextModel, type SpeechToTextModelParams } from '../../../core/src/index.js'
 import WebSocket from 'ws'
 
 /**
