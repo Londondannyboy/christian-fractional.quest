@@ -143,7 +143,13 @@ export function createVoiceAgent(params: CreateVoiceAgentParams): VoiceAgent {
           if (state.stopped) break
 
           // Check if it's an AIMessageChunk - extract text content
-          if (chunk && typeof chunk === 'object' && 'content' in chunk) {
+          // Skip ToolMessages (they have tool_call_id) - only AIMessages should go to TTS
+          if (
+            chunk &&
+            typeof chunk === 'object' &&
+            'content' in chunk &&
+            !('tool_call_id' in chunk)
+          ) {
             const content = (chunk as { content: unknown }).content
             if (typeof content === 'string' && content.length > 0) {
               controller.enqueue(content)
