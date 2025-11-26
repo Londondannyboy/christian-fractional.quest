@@ -116,87 +116,74 @@
             background: var(--accent-mustard);
         }
         
-        .provider-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-            gap: 10px;
-        }
-        
-        .provider-option {
+        .provider-select-wrapper {
             position: relative;
+            width: 100%;
         }
         
-        .provider-option input {
-            position: absolute;
-            opacity: 0;
-            pointer-events: none;
-        }
-        
-        .provider-option label {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 12px 14px;
+        .provider-select {
+            width: 100%;
+            padding: 14px 40px 14px 16px;
+            font-size: 14px;
+            font-weight: 500;
+            font-family: inherit;
+            color: var(--text-primary);
             background: var(--bg-warm);
             border: 2px solid transparent;
             border-radius: 12px;
             cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
             transition: all 0.2s ease;
         }
         
-        .provider-option label:hover {
+        .provider-select:hover {
             background: #f5f2ed;
         }
         
-        .provider-option input:checked + label {
+        .provider-select:focus {
+            outline: none;
             background: #fff;
             border-color: var(--accent-olive);
             box-shadow: 0 2px 8px rgba(107, 124, 94, 0.12);
         }
         
-        .provider-option.tts-option input:checked + label {
+        .provider-select.tts-select:focus {
             border-color: var(--accent-mustard);
             box-shadow: 0 2px 8px rgba(212, 168, 83, 0.15);
         }
         
-        .provider-option input:disabled + label {
-            opacity: 0.45;
-            cursor: not-allowed;
-        }
-        
-        .provider-icon {
-            width: 28px;
-            height: 28px;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-            font-weight: 600;
-            background: #e8e4de;
-            color: var(--text-secondary);
-        }
-        
-        .provider-option input:checked + label .provider-icon {
-            background: var(--accent-olive);
-            color: white;
-        }
-        
-        .provider-option.tts-option input:checked + label .provider-icon {
-            background: var(--accent-mustard);
-            color: white;
-        }
-        
-        .provider-name {
-            font-size: 13px;
-            font-weight: 500;
+        .provider-select option {
+            padding: 12px;
+            background: var(--bg-card);
             color: var(--text-primary);
         }
         
-        .provider-unavailable {
-            font-size: 10px;
-            color: var(--accent-tomato);
-            margin-top: 2px;
+        .provider-select option:disabled {
+            color: var(--text-muted);
+        }
+        
+        .provider-select-wrapper::after {
+            content: '';
+            position: absolute;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 6px solid var(--text-muted);
+            pointer-events: none;
+            transition: border-color 0.2s ease;
+        }
+        
+        .provider-select-wrapper:has(.provider-select:focus)::after {
+            border-top-color: var(--accent-olive);
+        }
+        
+        .provider-select-wrapper:has(.tts-select:focus)::after {
+            border-top-color: var(--accent-mustard);
         }
         
         /* Divider */
@@ -412,21 +399,19 @@
             <!-- Provider Selection -->
             <div class="provider-section" id="sttSection">
                 <div class="section-label stt">Speech Recognition</div>
-                <div class="provider-grid" id="sttProviders">
-                    <div class="loading-providers">
-                        <div class="spinner"></div>
-                        Loading providers...
-                    </div>
+                <div class="provider-select-wrapper" id="sttProviders">
+                    <select class="provider-select" id="sttSelect" disabled>
+                        <option>Loading providers...</option>
+                    </select>
                 </div>
             </div>
             
             <div class="provider-section" id="ttsSection">
                 <div class="section-label tts">Voice Synthesis</div>
-                <div class="provider-grid" id="ttsProviders">
-                    <div class="loading-providers">
-                        <div class="spinner"></div>
-                        Loading providers...
-                    </div>
+                <div class="provider-select-wrapper" id="ttsProviders">
+                    <select class="provider-select tts-select" id="ttsSelect" disabled>
+                        <option>Loading providers...</option>
+                    </select>
                 </div>
             </div>
             
@@ -462,8 +447,8 @@
         const statusDot = document.getElementById('statusDot');
         const statusProviders = document.getElementById('statusProviders');
         const logDiv = document.getElementById('log');
-        const sttProvidersDiv = document.getElementById('sttProviders');
-        const ttsProvidersDiv = document.getElementById('ttsProviders');
+        const sttSelect = document.getElementById('sttSelect');
+        const ttsSelect = document.getElementById('ttsSelect');
         
         let signalingWs, peerConnection, audioDataChannel;
         let audioContext, workletNode, mediaStream;
@@ -498,8 +483,8 @@
         }
         
         function updateProviderBadges() {
-            const sttLabel = document.querySelector(`input[name="stt"]:checked`)?.nextElementSibling?.querySelector('.provider-name')?.textContent || selectedSTT;
-            const ttsLabel = document.querySelector(`input[name="tts"]:checked`)?.nextElementSibling?.querySelector('.provider-name')?.textContent || selectedTTS;
+            const sttLabel = sttSelect.options[sttSelect.selectedIndex]?.text || selectedSTT;
+            const ttsLabel = ttsSelect.options[ttsSelect.selectedIndex]?.text || selectedTTS;
             
             statusProviders.innerHTML = `
                 <span class="provider-badge stt">${sttLabel}</span>
@@ -513,60 +498,52 @@
                 const response = await fetch('/api/providers');
                 const providers = await response.json();
                 
-                renderProviders('stt', providers.stt, sttProvidersDiv);
-                renderProviders('tts', providers.tts, ttsProvidersDiv);
+                renderProviders('stt', providers.stt, sttSelect);
+                renderProviders('tts', providers.tts, ttsSelect);
                 
                 // Set defaults based on availability
                 const availableSTT = providers.stt.find(p => p.available);
                 const availableTTS = providers.tts.find(p => p.available);
                 
-                if (availableSTT) selectedSTT = availableSTT.id;
-                if (availableTTS) selectedTTS = availableTTS.id;
+                if (availableSTT) {
+                    selectedSTT = availableSTT.id;
+                    sttSelect.value = availableSTT.id;
+                }
+                if (availableTTS) {
+                    selectedTTS = availableTTS.id;
+                    ttsSelect.value = availableTTS.id;
+                }
                 
                 updateProviderBadges();
             } catch (error) {
                 console.error('Failed to load providers:', error);
-                sttProvidersDiv.innerHTML = '<div class="loading-providers">Failed to load providers</div>';
-                ttsProvidersDiv.innerHTML = '<div class="loading-providers">Failed to load providers</div>';
+                sttSelect.innerHTML = '<option disabled>Failed to load</option>';
+                ttsSelect.innerHTML = '<option disabled>Failed to load</option>';
             }
         }
         
-        function renderProviders(type, providers, container) {
-            container.innerHTML = providers.map((provider, index) => {
+        function renderProviders(type, providers, selectElement) {
+            selectElement.innerHTML = providers.map(provider => {
                 const isSelected = (type === 'stt' && provider.id === selectedSTT) || 
                                    (type === 'tts' && provider.id === selectedTTS);
-                const optionClass = type === 'tts' ? 'provider-option tts-option' : 'provider-option';
+                const unavailableText = !provider.available ? ' (API key missing)' : '';
                 
-                return `
-                    <div class="${optionClass}">
-                        <input type="radio" 
-                               name="${type}" 
-                               id="${type}-${provider.id}" 
-                               value="${provider.id}"
-                               ${isSelected ? 'checked' : ''}
-                               ${!provider.available ? 'disabled' : ''}>
-                        <label for="${type}-${provider.id}">
-                            <div class="provider-icon">${providerIcons[provider.id] || provider.id[0].toUpperCase()}</div>
-                            <div>
-                                <div class="provider-name">${provider.name}</div>
-                                ${!provider.available ? '<div class="provider-unavailable">API key missing</div>' : ''}
-                            </div>
-                        </label>
-                    </div>
-                `;
+                return `<option value="${provider.id}" 
+                                ${isSelected ? 'selected' : ''} 
+                                ${!provider.available ? 'disabled' : ''}>${provider.name}${unavailableText}</option>`;
             }).join('');
             
-            // Add event listeners
-            container.querySelectorAll('input[type="radio"]').forEach(input => {
-                input.addEventListener('change', (e) => {
-                    if (type === 'stt') {
-                        selectedSTT = e.target.value;
-                    } else {
-                        selectedTTS = e.target.value;
-                    }
-                    updateProviderBadges();
-                    log(`Selected ${type.toUpperCase()}: ${e.target.value}`);
-                });
+            selectElement.disabled = false;
+            
+            // Add event listener
+            selectElement.addEventListener('change', (e) => {
+                if (type === 'stt') {
+                    selectedSTT = e.target.value;
+                } else {
+                    selectedTTS = e.target.value;
+                }
+                updateProviderBadges();
+                log(`Selected ${type.toUpperCase()}: ${e.target.value}`);
             });
         }
         

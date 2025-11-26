@@ -4,16 +4,10 @@
   "scripts": {
     "build": "pnpm run --recursive --parallel build",
     "watch": "pnpm build && pnpm run --parallel build --watch",
-    "clean": "git clean -fdX .",
-    "clean:build": "git clean -fdx -e node_modules .",
     "format": "oxfmt",
     "format:check": "oxfmt --check .",
     "lint": "oxlint .",
-    "start:webrtc": "pnpm run --filter=@voice-sandwich-demo/webrtc server",
-    "start:twilio": "pnpm run --filter=@voice-sandwich-demo/twilio server",
-    "test": "vitest",
-    "test:inspect": "node --inspect-brk node_modules/.bin/vitest",
-    "typecheck": "pnpm run --recursive --parallel typecheck"
+    "playground": "pnpm run --filter=@create-voice-agent/playground start"
   },
   "devDependencies": {
     "oxfmt": "^0.15.0",

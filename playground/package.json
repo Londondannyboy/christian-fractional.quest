@@ -1,7 +1,8 @@
 {
-  "name": "@create-voice-agent/demo",
+  "name": "@create-voice-agent/playground",
   "version": "0.0.1",
   "type": "module",
+  "private": true,
   "description": "Demo voice agent using the new abstractions",
   "scripts": {
     "start": "tsx src/index.ts",
