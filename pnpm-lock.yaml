@@ -141,9 +141,6 @@ importers:
 
   provider/openai:
     dependencies:
-      create-voice-agent:
-        specifier: workspace:*
-        version: link:../../core
       openai:
         specifier: ^6.9.1
         version: 6.9.1(ws@8.18.3)(zod@4.1.12)
@@ -151,6 +148,9 @@ importers:
       '@types/node':
         specifier: ^24.10.1
         version: 24.10.1
+      create-voice-agent:
+        specifier: workspace:*
+        version: link:../../core
       typescript:
         specifier: ~5.9.3
         version: 5.9.3
