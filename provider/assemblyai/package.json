@@ -4,23 +4,29 @@
   "type": "module",
   "description": "AssemblyAI Real-Time Speech-to-Text integration for voice agents",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "create-voice-agent": "workspace:*",
     "ws": "^8.18.3"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
     "@types/ws": "^8.18.1",
+    "create-voice-agent": "workspace:*",
     "typescript": "~5.9.3"
   },
   "peerDependencies": {
     "create-voice-agent": "workspace:*"
-  }
+  },
+  "files": [
+    "dist"
+  ]
 }
 

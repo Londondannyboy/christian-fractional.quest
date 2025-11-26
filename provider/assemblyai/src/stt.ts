@@ -8,7 +8,7 @@
  * for significantly lower latency than batch-based STT.
  */
 
-import querystring from 'querystring'
+import querystring from 'node:querystring'
 
 import { BaseSpeechToTextModel, type SpeechToTextModelParams } from 'create-voice-agent'
 import { WebSocket } from 'ws'

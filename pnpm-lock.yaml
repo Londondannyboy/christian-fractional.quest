@@ -91,9 +91,6 @@ importers:
 
   provider/assemblyai:
     dependencies:
-      create-voice-agent:
-        specifier: workspace:*
-        version: link:../../core
       ws:
         specifier: ^8.18.3
         version: 8.18.3
@@ -104,6 +101,9 @@ importers:
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1
+      create-voice-agent:
+        specifier: workspace:*
+        version: link:../../core
       typescript:
         specifier: ~5.9.3
         version: 5.9.3
