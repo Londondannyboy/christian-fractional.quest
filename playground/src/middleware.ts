@@ -7,7 +7,7 @@ import { createThinkingFillerMiddleware } from 'create-voice-agent'
  */
 export function createFillerMiddleware() {
   return createThinkingFillerMiddleware({
-    thresholdMs: 1200,
+    thresholdMs: 2000,
     fillerPhrases: [
       'Let me see here...',
       'Hmm, one moment...',
