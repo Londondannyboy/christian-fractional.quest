@@ -18,9 +18,12 @@ WORKDIR /app
 
 # Copy package files first for better caching
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY packages/graphs/package.json ./packages/graphs/
-COPY packages/web/package.json ./packages/web/
-COPY packages/webrtc/package.json ./packages/webrtc/
+COPY core/package.json ./core/
+COPY provider/assemblyai/package.json ./provider/assemblyai/
+COPY provider/elevenlabs/package.json ./provider/elevenlabs/
+COPY provider/hume/package.json ./provider/hume/
+COPY provider/openai/package.json ./provider/openai/
+COPY playground/package.json ./playground/
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
@@ -53,15 +56,20 @@ WORKDIR /app
 
 # Copy package files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY packages/graphs/package.json ./packages/graphs/
-COPY packages/web/package.json ./packages/web/
-COPY packages/webrtc/package.json ./packages/webrtc/
+COPY core/package.json ./core/
+COPY provider/assemblyai/package.json ./provider/assemblyai/
+COPY provider/elevenlabs/package.json ./provider/elevenlabs/
+COPY provider/hume/package.json ./provider/hume/
+COPY provider/openai/package.json ./provider/openai/
+COPY playground/package.json ./playground/
 
 # Install production dependencies only
 RUN pnpm install --frozen-lockfile --prod=false
 
 # Copy built files and source (needed for tsx runtime)
-COPY --from=builder /app/packages ./packages
+COPY --from=builder /app/core ./core
+COPY --from=builder /app/provider ./provider
+COPY --from=builder /app/playground ./playground
 
 # Expose ports:
 # - 3001: HTTP/WebSocket server (signaling + static files)
@@ -69,8 +77,8 @@ COPY --from=builder /app/packages ./packages
 EXPOSE 3001
 EXPOSE 10000-10100/udp
 
-# Set working directory to webrtc package
-WORKDIR /app/packages/webrtc
+# Set working directory to playground
+WORKDIR /app/playground
 
-# Start the WebRTC server
-CMD ["pnpm", "run", "server"]
+# Start the playground server
+CMD ["pnpm", "run", "start"]

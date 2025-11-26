@@ -25,6 +25,9 @@
   "peerDependencies": {
     "@langchain/core": "^1.0.0",
     "@langchain/langgraph": "^1.0.0"
-  }
+  },
+  "files": [
+    "dist"
+  ]
 }
 
