@@ -1,6 +1,6 @@
 {
   "name": "create-voice-agent",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "type": "module",
   "description": "Core building blocks for voice agents with LangChain",
   "exports": {
@@ -30,4 +30,3 @@
     "dist"
   ]
 }
-
