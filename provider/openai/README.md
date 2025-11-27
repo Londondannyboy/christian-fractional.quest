@@ -174,6 +174,33 @@ Interrupt the current speech generation.
 tts.interrupt();
 ```
 
+#### `speak(text: string): ReadableStream<Buffer>`
+
+Generate speech directly without going through the voice pipeline. Returns a `ReadableStream` of PCM audio buffers.
+
+This is useful for:
+
+- **Initial greetings** when a call starts
+- **System announcements** that bypass the agent
+- **One-off speech synthesis** outside of conversations
+
+```typescript
+const tts = new OpenAITextToSpeech({
+  apiKey: process.env.OPENAI_API_KEY!,
+  voice: "nova",
+});
+
+// Generate and play a greeting
+const audioStream = tts.speak("Hi there! How can I assist you today?");
+
+for await (const chunk of audioStream) {
+  // Send to audio output (speakers, WebRTC, etc.)
+  audioOutput.write(chunk);
+}
+```
+
+The `speak()` method uses the same voice and model configuration as the main TTS pipeline. Audio is automatically resampled from OpenAI's native 24kHz to your configured sample rate.
+
 ### Callbacks
 
 #### `onAudioComplete`

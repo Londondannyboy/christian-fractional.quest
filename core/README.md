@@ -57,7 +57,7 @@ const audioOutput = voiceAgent.process(audioInputStream);
 
 ### Voice Pipeline Architecture
 
-```
+```txt
 Audio Input → [beforeSTT] → STT → [afterSTT] → Agent → [beforeTTS] → TTS → [afterTTS] → Audio Output
 ```
 
@@ -152,6 +152,13 @@ abstract class BaseTextToSpeechModel extends TransformStream<string, Buffer> {
   /** Interrupt current TTS output (for barge-in support) */
   abstract interrupt(): void;
   
+  /** 
+   * Speak text directly and return a stream of audio buffers.
+   * Useful for one-off speech synthesis (e.g., greetings) without 
+   * going through the full voice agent pipeline.
+   */
+  abstract speak(text: string): ReadableStream<Buffer>;
+  
   /** Add listener for when audio playback completes */
   addAudioCompleteListener(listener: () => void): void;
   
@@ -160,6 +167,29 @@ abstract class BaseTextToSpeechModel extends TransformStream<string, Buffer> {
   
   /** Called by implementations when audio playback completes */
   protected notifyAudioComplete(): void;
+}
+```
+
+##### Using `speak()` for Direct Speech Synthesis
+
+The `speak()` method allows you to generate speech independently of the voice pipeline. This is useful for:
+
+- **Initial greetings** when a call starts
+- **System announcements** that don't require agent processing
+- **One-off audio generation** outside of conversations
+
+```typescript
+const tts = new ElevenLabsTextToSpeech({
+  apiKey: process.env.ELEVENLABS_API_KEY,
+  voiceId: "your-voice-id",
+});
+
+// Generate greeting audio
+const audioStream = tts.speak("Hello! How can I help you today?");
+
+// Stream the audio to your output
+for await (const chunk of audioStream) {
+  await playAudio(chunk);
 }
 ```
 

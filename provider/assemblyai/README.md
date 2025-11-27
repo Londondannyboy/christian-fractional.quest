@@ -286,6 +286,7 @@ const stt = new AssemblyAISpeechToText({
 ```
 
 **Limits:**
+
 - Maximum 100 terms
 - Terms longer than 50 characters are ignored
 

@@ -102,6 +102,33 @@ Interrupt the current speech generation. Useful for barge-in handling.
 tts.interrupt();
 ```
 
+#### `speak(text: string): ReadableStream<Buffer>`
+
+Generate speech directly without going through the voice pipeline. Returns a `ReadableStream` of PCM audio buffers.
+
+This is useful for:
+
+- **Initial greetings** when a call starts
+- **System announcements** that bypass the agent
+- **One-off speech synthesis** outside of conversations
+
+```typescript
+const tts = new HumeTextToSpeech({
+  apiKey: process.env.HUME_API_KEY!,
+  voiceName: "Kora",
+});
+
+// Generate and play a greeting
+const audioStream = tts.speak("Hello! I'm here to help. What's on your mind?");
+
+for await (const chunk of audioStream) {
+  // Send to audio output (speakers, WebRTC, etc.)
+  audioOutput.write(chunk);
+}
+```
+
+The `speak()` method opens a dedicated WebSocket connection and uses the same voice configuration as the main TTS pipeline.
+
 ### Callbacks
 
 #### `onAudioComplete`

@@ -47,9 +47,14 @@ function resamplePCM(input: Buffer, sourceSampleRate: number, targetSampleRate: 
 export class HumeTextToSpeech extends BaseTextToSpeechModel {
   readonly provider = 'hume'
   private _interrupt: () => void = () => {}
+  private _speak: (text: string) => ReadableStream<Buffer>
 
   interrupt(): void {
     this._interrupt()
+  }
+
+  speak(text: string): ReadableStream<Buffer> {
+    return this._speak(text)
   }
 
   constructor(options: HumeOptions) {
@@ -72,6 +77,49 @@ export class HumeTextToSpeech extends BaseTextToSpeechModel {
 
     let closeResolve: (() => void) | null = null
     let closePromise: Promise<void> | null = null
+
+    // Build WebSocket URL with auth params
+    const buildWebSocketUrl = (): string => {
+      const params = new URLSearchParams({
+        api_key: apiKey,
+        no_binary: 'true',
+        instant_mode: 'true',
+        strip_headers: 'true',
+        format_type: 'pcm',
+      })
+      return `wss://api.hume.ai/v0/tts/stream/input?${params.toString()}`
+    }
+
+    // Build voice message payload
+    const buildVoiceMessage = (text: string) => ({
+      text,
+      voice: {
+        name: voiceName,
+        provider: voiceProvider,
+      },
+    })
+
+    // Process audio message and return resampled buffer
+    const processAudioMessage = (data: Buffer, logPrefix: string): Buffer | null => {
+      try {
+        const message = JSON.parse(data.toString())
+
+        if (message.type === 'audio' && message.audio) {
+          let audioBuffer: Buffer = Buffer.from(message.audio, 'base64')
+
+          if (HUME_SAMPLE_RATE !== outputSampleRate) {
+            audioBuffer = resamplePCM(audioBuffer, HUME_SAMPLE_RATE, outputSampleRate) as Buffer
+          }
+
+          return audioBuffer
+        } else if (message.type === 'error') {
+          console.error(`${logPrefix} error:`, message.message || message)
+        }
+      } catch (e) {
+        console.error(`${logPrefix}: Error parsing message:`, e)
+      }
+      return null
+    }
 
     const resetClosePromise = () => {
       closePromise = new Promise((resolve) => {
@@ -111,15 +159,7 @@ export class HumeTextToSpeech extends BaseTextToSpeechModel {
       resetClosePromise()
 
       return new Promise((resolve, reject) => {
-        const params = new URLSearchParams({
-          api_key: apiKey,
-          no_binary: 'true',
-          instant_mode: 'true',
-          strip_headers: 'true',
-          format_type: 'pcm',
-        })
-
-        const url = `wss://api.hume.ai/v0/tts/stream/input?${params.toString()}`
+        const url = buildWebSocketUrl()
         console.log('Hume TTS: Connecting...')
 
         const newWs = new WebSocket(url)
@@ -131,24 +171,9 @@ export class HumeTextToSpeech extends BaseTextToSpeechModel {
         })
 
         newWs.on('message', (data: Buffer) => {
-          try {
-            const message = JSON.parse(data.toString())
-
-            if (message.type === 'audio' && message.audio) {
-              let audioBuffer: Buffer = Buffer.from(message.audio, 'base64')
-
-              if (HUME_SAMPLE_RATE !== outputSampleRate) {
-                audioBuffer = resamplePCM(audioBuffer, HUME_SAMPLE_RATE, outputSampleRate) as Buffer
-              }
-
-              if (activeController) {
-                activeController.enqueue(audioBuffer)
-              }
-            } else if (message.type === 'error') {
-              console.error('Hume TTS error:', message.message || message)
-            }
-          } catch (e) {
-            console.error('Hume TTS: Error parsing message:', e)
+          const audioBuffer = processAudioMessage(data, 'Hume TTS')
+          if (audioBuffer && activeController) {
+            activeController.enqueue(audioBuffer)
           }
         })
 
@@ -202,14 +227,7 @@ export class HumeTextToSpeech extends BaseTextToSpeechModel {
           await ensureConnection()
 
           if (ws && ws.readyState === WebSocket.OPEN) {
-            const message = {
-              text,
-              voice: {
-                name: voiceName,
-                provider: voiceProvider,
-              },
-            }
-            ws.send(JSON.stringify(message))
+            ws.send(JSON.stringify(buildVoiceMessage(text)))
             ws.send(JSON.stringify({ flush: true }))
           } else {
             console.warn('Hume TTS: WebSocket not open, dropping text:', text)
@@ -247,5 +265,41 @@ export class HumeTextToSpeech extends BaseTextToSpeechModel {
     })
 
     this._interrupt = interruptTTS
+
+    // Implement speak method for one-off TTS
+    this._speak = (text: string): ReadableStream<Buffer> => {
+      return new ReadableStream<Buffer>({
+        start(controller) {
+          const url = buildWebSocketUrl()
+          console.log('Hume speak: Connecting...')
+
+          const speakWs = new WebSocket(url)
+
+          speakWs.on('open', () => {
+            console.log('Hume speak: WebSocket connected')
+            speakWs.send(JSON.stringify(buildVoiceMessage(text)))
+            speakWs.send(JSON.stringify({ flush: true }))
+            speakWs.send(JSON.stringify({ close: true }))
+          })
+
+          speakWs.on('message', (data: Buffer) => {
+            const audioBuffer = processAudioMessage(data, 'Hume speak')
+            if (audioBuffer) {
+              controller.enqueue(audioBuffer)
+            }
+          })
+
+          speakWs.on('error', (err) => {
+            console.error('Hume speak WebSocket Error:', err)
+            controller.close()
+          })
+
+          speakWs.on('close', () => {
+            console.log('Hume speak: WebSocket closed')
+            controller.close()
+          })
+        },
+      })
+    }
   }
 }

@@ -118,7 +118,7 @@ app.get(
           if (event.channel.label === 'audio') {
             audioDataChannel = event.channel
 
-            audioDataChannel.onopen = () => {
+            audioDataChannel.onopen = async () => {
               console.log('Audio channel open')
 
               // Create the voice agent with selected providers
@@ -136,25 +136,33 @@ app.get(
                 providers: { sttProvider, ttsProvider },
               })
 
-              // Process audio through the voice agent pipeline
-              const audioOutput = agent.process(inputStream)
-              const reader = audioOutput.getReader()
-
-              ;(async function startPipelineReader() {
+              // Helper to stream audio chunks to the data channel
+              const streamToChannel = async (
+                stream: ReadableStream<Buffer>,
+                label: string
+              ) => {
+                const reader = stream.getReader()
                 try {
                   while (true) {
                     const { done, value } = await reader.read()
                     if (done || pipelineClosed) break
-
                     if (audioDataChannel && audioDataChannel.readyState === 'open') {
                       audioDataChannel.send(value as unknown as ArrayBuffer)
                     }
                   }
                 } catch (e) {
-                  console.error('Pipeline error:', e)
-                  pipelineClosed = true
+                  console.error(`${label} error:`, e)
+                  if (label === 'Pipeline') pipelineClosed = true
                 }
-              })()
+              }
+
+              // Send initial greeting when call starts (runs in parallel with pipeline)
+              const greeting =
+                "Hi there! Welcome to the Sandwich Shop. What can I get started for you today?"
+              streamToChannel(agent.tts.speak(greeting), 'Greeting')
+
+              // Process audio through the voice agent pipeline
+              streamToChannel(agent.process(inputStream), 'Pipeline')
             }
 
             audioDataChannel.onmessage = (msgEvent: { data: ArrayBuffer | string }) => {

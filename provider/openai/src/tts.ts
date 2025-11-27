@@ -56,6 +56,7 @@ function resamplePCM(input: Buffer, fromRate: number, toRate: number): Buffer {
 export class OpenAITextToSpeech extends BaseTextToSpeechModel {
   readonly provider = 'openai'
   private isInterrupted = false
+  private _speak: (text: string) => ReadableStream<Buffer>
 
   interrupt(): void {
     console.log('OpenAI TTS: Interrupted by user (barge-in)')
@@ -63,6 +64,10 @@ export class OpenAITextToSpeech extends BaseTextToSpeechModel {
     setTimeout(() => {
       this.isInterrupted = false
     }, 100)
+  }
+
+  speak(text: string): ReadableStream<Buffer> {
+    return this._speak(text)
   }
 
   constructor(options: OpenAITTSOptions) {
@@ -80,6 +85,46 @@ export class OpenAITextToSpeech extends BaseTextToSpeechModel {
 
     // OpenAI PCM output is always 24kHz
     const openaiSampleRate = 24000
+    const chunkSize = 4096
+
+    // Generate speech and return resampled PCM buffer
+    const generateSpeech = async (text: string, logPrefix: string): Promise<Buffer> => {
+      const displayText = text.length > 50 ? `${text.substring(0, 50)}...` : text
+      console.log(`${logPrefix}: Generating speech for: "${displayText}"`)
+
+      const response = await openai.audio.speech.create({
+        model,
+        voice,
+        input: text,
+        response_format: 'pcm',
+      })
+
+      const rawBuffer = Buffer.from(await response.arrayBuffer())
+      console.log(`${logPrefix}: Received ${(rawBuffer.length / 1024).toFixed(1)}KB PCM audio (24kHz)`)
+
+      const resampledBuffer = resamplePCM(rawBuffer, openaiSampleRate, sampleRate)
+      console.log(
+        `${logPrefix}: Resampled to ${sampleRate}Hz (${(resampledBuffer.length / 1024).toFixed(1)}KB)`
+      )
+
+      return resampledBuffer
+    }
+
+    // Stream buffer in chunks to controller
+    const streamChunks = (
+      buffer: Buffer,
+      controller: { enqueue: (chunk: Buffer) => void },
+      checkInterrupt?: () => boolean
+    ): boolean => {
+      for (let i = 0; i < buffer.length; i += chunkSize) {
+        if (checkInterrupt?.()) {
+          return false
+        }
+        const chunk = buffer.subarray(i, Math.min(i + chunkSize, buffer.length))
+        controller.enqueue(chunk)
+      }
+      return true
+    }
 
     super({
       async transform(text, controller) {
@@ -89,40 +134,20 @@ export class OpenAITextToSpeech extends BaseTextToSpeechModel {
         }
 
         try {
-          const displayText = text.length > 50 ? `${text.substring(0, 50)}...` : text
-          console.log(`OpenAI TTS: Generating speech for: "${displayText}"`)
+          const resampledBuffer = await generateSpeech(text, 'OpenAI TTS')
 
-          const response = await openai.audio.speech.create({
-            model,
-            voice,
-            input: text,
-            response_format: 'pcm', // Raw PCM 24kHz 16-bit mono
-          })
-
-          const rawBuffer = Buffer.from(await response.arrayBuffer())
-          console.log(
-            `OpenAI TTS: Received ${(rawBuffer.length / 1024).toFixed(1)}KB PCM audio (24kHz)`
-          )
-
-          // Resample from 24kHz to target sample rate
-          const resampledBuffer = resamplePCM(rawBuffer, openaiSampleRate, sampleRate)
-          console.log(
-            `OpenAI TTS: Resampled to ${sampleRate}Hz (${(resampledBuffer.length / 1024).toFixed(1)}KB)`
-          )
-
-          // Stream in chunks for better responsiveness
-          const chunkSize = 4096
-          for (let i = 0; i < resampledBuffer.length; i += chunkSize) {
+          const completed = streamChunks(resampledBuffer, controller, () => {
             if (instance.isInterrupted) {
               console.log('OpenAI TTS: Stream interrupted')
               onInterrupt?.()
-              return
+              return true
             }
-            const chunk = resampledBuffer.subarray(i, Math.min(i + chunkSize, resampledBuffer.length))
-            controller.enqueue(chunk)
-          }
+            return false
+          })
 
-          onAudioComplete?.()
+          if (completed) {
+            onAudioComplete?.()
+          }
         } catch (err) {
           console.error('OpenAI TTS Error:', err)
         }
@@ -136,5 +161,21 @@ export class OpenAITextToSpeech extends BaseTextToSpeechModel {
         instance.isInterrupted = value
       },
     })
+
+    // Implement speak method for one-off TTS
+    this._speak = (text: string): ReadableStream<Buffer> => {
+      return new ReadableStream<Buffer>({
+        async start(controller) {
+          try {
+            const resampledBuffer = await generateSpeech(text, 'OpenAI speak')
+            streamChunks(resampledBuffer, controller)
+            controller.close()
+          } catch (err) {
+            console.error('OpenAI speak Error:', err)
+            controller.close()
+          }
+        },
+      })
+    }
   }
 }

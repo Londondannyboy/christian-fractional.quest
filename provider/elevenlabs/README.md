@@ -233,6 +233,33 @@ Interrupt the current speech generation. Useful for barge-in handling.
 tts.interrupt();
 ```
 
+#### `speak(text: string): ReadableStream<Buffer>`
+
+Generate speech directly without going through the voice pipeline. Returns a `ReadableStream` of PCM audio buffers.
+
+This is useful for:
+
+- **Initial greetings** when a call starts
+- **System announcements** that bypass the agent
+- **One-off speech synthesis** outside of conversations
+
+```typescript
+const tts = new ElevenLabsTextToSpeech({
+  apiKey: process.env.ELEVENLABS_API_KEY!,
+  voiceId: "your-voice-id",
+});
+
+// Generate and play a greeting
+const audioStream = tts.speak("Welcome to our service! How can I help you?");
+
+for await (const chunk of audioStream) {
+  // Send to audio output (speakers, WebRTC, etc.)
+  audioOutput.write(chunk);
+}
+```
+
+The `speak()` method uses the same voice settings and configuration as the main TTS pipeline, ensuring consistent voice quality.
+
 ### Callbacks
 
 #### `onAudioComplete`

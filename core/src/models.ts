@@ -95,6 +95,16 @@ export abstract class BaseTextToSpeechModel extends TransformStream<string, Buff
   abstract interrupt(): void
 
   /**
+   * Speak text and return a stream of audio buffers.
+   * This is a convenience method for one-off speech synthesis
+   * without needing to set up a full pipeline.
+   *
+   * @param text - The text to convert to speech
+   * @returns A ReadableStream of PCM audio buffers
+   */
+  abstract speak(text: string): ReadableStream<Buffer>
+
+  /**
    * Add a listener for when audio playback completes.
    * Multiple listeners can be registered; all will be called.
    */

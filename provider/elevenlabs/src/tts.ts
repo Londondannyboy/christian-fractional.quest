@@ -196,9 +196,14 @@ export interface ElevenLabsOptions extends TextToSpeechModelParams {
 export class ElevenLabsTextToSpeech extends BaseTextToSpeechModel {
   readonly provider = 'elevenlabs'
   private _interrupt: () => void = () => {}
+  private _speak: (text: string) => ReadableStream<Buffer>
 
   interrupt(): void {
     this._interrupt()
+  }
+
+  speak(text: string): ReadableStream<Buffer> {
+    return this._speak(text)
   }
 
   constructor(options: ElevenLabsOptions) {
@@ -252,6 +257,73 @@ export class ElevenLabsTextToSpeech extends BaseTextToSpeechModel {
       return `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream?${params}`
     }
 
+    // Build request body with all configured parameters
+    const buildRequestBody = (text: string): Record<string, unknown> => {
+      const body: Record<string, unknown> = {
+        text,
+        model_id: modelId,
+        voice_settings: resolvedVoiceSettings,
+      }
+      if (languageCode) body.language_code = languageCode
+      if (seed !== undefined) body.seed = seed
+      if (previousText) body.previous_text = previousText
+      if (nextText) body.next_text = nextText
+      if (applyTextNormalization) body.apply_text_normalization = applyTextNormalization
+      if (applyLanguageTextNormalization !== undefined) {
+        body.apply_language_text_normalization = applyLanguageTextNormalization
+      }
+      return body
+    }
+
+    // Make TTS API request
+    const fetchTTSStream = async (text: string, signal: AbortSignal): Promise<Response> => {
+      const response = await fetch(getStreamUrl(), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'xi-api-key': apiKey,
+        },
+        body: JSON.stringify(buildRequestBody(text)),
+        signal,
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`ElevenLabs API error ${response.status}: ${errorText}`)
+      }
+
+      if (!response.body) {
+        throw new Error('No response body from ElevenLabs')
+      }
+
+      return response
+    }
+
+    // Align PCM buffer to 16-bit sample boundaries
+    const alignPCMBuffer = (
+      buffer: Buffer,
+      pendingByte: number | null
+    ): { aligned: Buffer; pending: number | null } => {
+      let aligned = buffer
+
+      // Prepend pending byte from previous chunk
+      if (pendingByte !== null) {
+        const newBuffer = Buffer.alloc(buffer.length + 1)
+        newBuffer[0] = pendingByte
+        buffer.copy(newBuffer, 1)
+        aligned = newBuffer
+      }
+
+      // Save odd byte for next chunk
+      let pending: number | null = null
+      if (aligned.length % 2 !== 0) {
+        pending = aligned[aligned.length - 1]
+        aligned = aligned.subarray(0, aligned.length - 1)
+      }
+
+      return { aligned, pending }
+    }
+
     const streamAudio = async (text: string): Promise<void> => {
       if (!text.trim() || isInterrupted || isShuttingDown) return
 
@@ -263,49 +335,12 @@ export class ElevenLabsTextToSpeech extends BaseTextToSpeechModel {
       )
 
       try {
-        const requestBody: Record<string, unknown> = {
-          text,
-          model_id: modelId,
-          voice_settings: resolvedVoiceSettings,
-        }
+        const response = await fetchTTSStream(text, signal)
+        console.log(`ElevenLabs: Response content-type: ${response.headers.get('content-type')}`)
 
-        // Add optional parameters only if provided
-        if (languageCode) requestBody.language_code = languageCode
-        if (seed !== undefined) requestBody.seed = seed
-        if (previousText) requestBody.previous_text = previousText
-        if (nextText) requestBody.next_text = nextText
-        if (applyTextNormalization) requestBody.apply_text_normalization = applyTextNormalization
-        if (applyLanguageTextNormalization !== undefined) {
-          requestBody.apply_language_text_normalization = applyLanguageTextNormalization
-        }
-
-        const response = await fetch(getStreamUrl(), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'xi-api-key': apiKey,
-          },
-          body: JSON.stringify(requestBody),
-          signal,
-        })
-
-        if (!response.ok) {
-          const errorText = await response.text()
-          throw new Error(`ElevenLabs API error ${response.status}: ${errorText}`)
-        }
-
-        if (!response.body) {
-          throw new Error('No response body from ElevenLabs')
-        }
-
-        const contentType = response.headers.get('content-type')
-        console.log(`ElevenLabs: Response content-type: ${contentType}`)
-
-        const reader = response.body.getReader()
+        const reader = response.body!.getReader()
         let totalBytes = 0
         let chunkCount = 0
-
-        // Buffer to hold incomplete samples (PCM is 16-bit = 2 bytes per sample)
         let pendingByte: number | null = null
 
         while (true) {
@@ -323,37 +358,22 @@ export class ElevenLabsTextToSpeech extends BaseTextToSpeechModel {
           }
 
           if (value && activeController) {
-            let buffer = Buffer.from(value)
+            const buffer = Buffer.from(value)
             totalBytes += buffer.length
             chunkCount++
 
-            // Log first chunk for debugging
             if (chunkCount === 1) {
               console.log(
                 `ElevenLabs: First chunk size: ${buffer.length} bytes, first 16 bytes: ${buffer.slice(0, 16).toString('hex')}`
               )
             }
 
-            // Handle sample alignment for 16-bit PCM
-            // If we have a pending byte from the previous chunk, prepend it
-            if (pendingByte !== null) {
-              const newBuffer = Buffer.alloc(buffer.length + 1)
-              newBuffer[0] = pendingByte
-              buffer.copy(newBuffer, 1)
-              buffer = newBuffer
-              pendingByte = null
-            }
+            const { aligned, pending } = alignPCMBuffer(buffer, pendingByte)
+            pendingByte = pending
 
-            // If odd number of bytes, save the last byte for the next chunk
-            if (buffer.length % 2 !== 0) {
-              pendingByte = buffer[buffer.length - 1]
-              buffer = buffer.subarray(0, buffer.length - 1)
-            }
-
-            // Only enqueue if we have data
-            if (buffer.length > 0) {
+            if (aligned.length > 0) {
               try {
-                activeController.enqueue(buffer)
+                activeController.enqueue(aligned)
               } catch {
                 console.warn('ElevenLabs: Controller closed, stopping audio output')
                 reader.cancel()
@@ -364,7 +384,6 @@ export class ElevenLabsTextToSpeech extends BaseTextToSpeechModel {
         }
 
         if (!isInterrupted && !signal.aborted) {
-          // Notify user callback and registered listeners
           onAudioComplete?.()
           notifyAudioCompleteCallback()
         }
@@ -473,5 +492,51 @@ export class ElevenLabsTextToSpeech extends BaseTextToSpeechModel {
 
     // Assign callback now that `this` is available
     notifyAudioCompleteCallback = () => this.notifyAudioComplete()
+
+    // Implement speak method for one-off TTS
+    this._speak = (text: string): ReadableStream<Buffer> => {
+      return new ReadableStream<Buffer>({
+        async start(controller) {
+          const abortController = new AbortController()
+
+          console.log(
+            `ElevenLabs speak: Streaming TTS for "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`
+          )
+
+          try {
+            const response = await fetchTTSStream(text, abortController.signal)
+            const reader = response.body!.getReader()
+            let pendingByte: number | null = null
+
+            while (true) {
+              const { done, value } = await reader.read()
+
+              if (done) {
+                console.log('ElevenLabs speak: Stream complete')
+                break
+              }
+
+              if (value) {
+                const { aligned, pending } = alignPCMBuffer(Buffer.from(value), pendingByte)
+                pendingByte = pending
+
+                if (aligned.length > 0) {
+                  controller.enqueue(aligned)
+                }
+              }
+            }
+
+            controller.close()
+          } catch (err) {
+            if (err instanceof Error && err.name === 'AbortError') {
+              console.log('ElevenLabs speak: Request aborted')
+            } else {
+              console.error('ElevenLabs speak: Streaming error:', err)
+            }
+            controller.close()
+          }
+        },
+      })
+    }
   }
 }
