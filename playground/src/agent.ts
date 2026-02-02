@@ -7,21 +7,31 @@ import { MemorySaver } from '@langchain/langgraph'
 import { createVoiceAgent } from 'create-voice-agent'
 
 import { createFillerMiddleware } from './middleware.js'
-import { addToOrder, confirmOrder, hangUp } from './tools.js'
+import { hangUp } from './tools.js'
 
 const SYSTEM_PROMPT = `
-You are a helpful sandwich shop assistant. Your goal is to take the user's order. 
-Be concise and friendly. 
+You are a warm, encouraging career coach assistant. Your goal is to help job seekers with their career journey.
+Be supportive, professional, and actionable in your advice.
 
-Available options:
-- Meats: turkey, ham, roast beef
-- Cheeses: swiss, cheddar, provolone
-- Toppings: lettuce, tomato, onion, pickles, mayo, mustard
+CAPABILITIES:
+- Career path advice and planning
+- Job search strategies and tips
+- Resume and cover letter feedback
+- Interview preparation and practice
+- Salary negotiation guidance
+- Skills development recommendations
+- Work-life balance advice
+
+CONVERSATION STYLE:
+- Be warm and encouraging
+- Ask clarifying questions to understand their situation
+- Provide specific, actionable advice
+- Celebrate their wins and progress
+- Be empathetic about job search challenges
 
 IMPORTANT: Call the hang_up tool when:
-- After confirming an order and the customer is done
-- When the customer says goodbye or thanks you
-- When the customer says "that's it", "that's all", "bye", etc.
+- The user says goodbye, thanks you, or ends the conversation
+- The user says "that's all", "bye", "thank you", etc.
 `
 
 let pendingHangUp: string | null = null
@@ -41,6 +51,8 @@ interface CreateVoiceAgentParams {
   onSpeechStart?: () => void
   /** Provider configuration */
   providers?: ProviderConfig
+  /** User's name for personalized greeting */
+  userName?: string
 }
 
 /**
@@ -130,16 +142,22 @@ export function getAvailableProviders(): {
   }
 }
 
-export function createSandwichShopVoiceAgent(params: CreateVoiceAgentParams) {
+export function createCareerCoachVoiceAgent(params: CreateVoiceAgentParams) {
   const {
     closeConnection,
     onSpeechStart,
     providers = { sttProvider: 'assemblyai', ttsProvider: 'elevenlabs' },
+    userName,
   } = params
 
   console.log(
-    `Creating voice agent with STT: ${providers.sttProvider}, TTS: ${providers.ttsProvider}`
+    `Creating voice agent with STT: ${providers.sttProvider}, TTS: ${providers.ttsProvider}, User: ${userName || 'Anonymous'}`
   )
+
+  // Build personalized system prompt
+  const personalizedPrompt = userName
+    ? `USER CONTEXT: The user's name is ${userName}. Always address them by name.\n\n${SYSTEM_PROMPT}`
+    : SYSTEM_PROMPT
 
   const stt = createSTTProvider(providers.sttProvider, onSpeechStart)
   const tts = createTTSProvider(providers.ttsProvider, () => {
@@ -152,8 +170,8 @@ export function createSandwichShopVoiceAgent(params: CreateVoiceAgentParams) {
   return createVoiceAgent({
     // LangChain agent configuration
     model: new ChatGoogleGenerativeAI({ model: 'gemini-2.5-flash' }),
-    tools: [addToOrder, confirmOrder, hangUp],
-    systemPrompt: SYSTEM_PROMPT,
+    tools: [hangUp],
+    systemPrompt: personalizedPrompt,
     checkpointer: new MemorySaver(),
 
     // Voice configuration

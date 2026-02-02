@@ -1,0 +1,8 @@
+{
+  "node_version": "20",
+  "dependencies": ["."],
+  "graphs": {
+    "careers_coach": "./src/graph.ts:graph"
+  },
+  "env": ".env"
+}

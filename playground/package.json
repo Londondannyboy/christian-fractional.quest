@@ -10,15 +10,16 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@create-voice-agent/assemblyai": "workspace:*",
+    "@create-voice-agent/elevenlabs": "workspace:*",
+    "@create-voice-agent/hume": "workspace:*",
+    "@create-voice-agent/openai": "workspace:*",
     "@hono/node-server": "^1.19.6",
     "@hono/node-ws": "^1.2.0",
     "@langchain/google-genai": "^1.0.3",
     "@langchain/langgraph": "^1.0.2",
+    "@neondatabase/serverless": "^1.0.2",
     "@roamhq/wrtc": "^0.9.1",
-    "@create-voice-agent/assemblyai": "workspace:*",
-    "@create-voice-agent/openai": "workspace:*",
-    "@create-voice-agent/elevenlabs": "workspace:*",
-    "@create-voice-agent/hume": "workspace:*",
     "create-voice-agent": "workspace:*",
     "dotenv": "^17.2.3",
     "hono": "^4.10.6",
@@ -31,4 +32,3 @@
     "typescript": "~5.9.3"
   }
 }
-

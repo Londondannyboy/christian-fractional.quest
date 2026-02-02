@@ -17,7 +17,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 
 import {
-  createSandwichShopVoiceAgent,
+  createCareerCoachVoiceAgent,
   getAvailableProviders,
   type STTProvider,
   type TTSProvider,
@@ -53,9 +53,10 @@ app.get(
     let controller: ReadableStreamDefaultController<Buffer>
     let pipelineClosed = false
     let signalingWs: { send: (data: string) => void; readyState: number } | null = null
-    let agent: ReturnType<typeof createSandwichShopVoiceAgent> | null = null
+    let agent: ReturnType<typeof createCareerCoachVoiceAgent> | null = null
     let sttProvider: STTProvider = 'assemblyai'
     let ttsProvider: TTSProvider = 'elevenlabs'
+    let userName: string | undefined
 
     function sendSignalingMessage(message: object) {
       if (signalingWs && signalingWs.readyState === 1) {
@@ -122,7 +123,7 @@ app.get(
               console.log('Audio channel open')
 
               // Create the voice agent with selected providers
-              agent = createSandwichShopVoiceAgent({
+              agent = createCareerCoachVoiceAgent({
                 closeConnection,
                 onSpeechStart: () => {
                   // Barge-in: user started speaking
@@ -134,6 +135,7 @@ app.get(
                   }
                 },
                 providers: { sttProvider, ttsProvider },
+                userName,
               })
 
               // Helper to stream audio chunks to the data channel
@@ -157,8 +159,9 @@ app.get(
               }
 
               // Send initial greeting when call starts (runs in parallel with pipeline)
-              const greeting =
-                "Hi there! Welcome to the Sandwich Shop. What can I get started for you today?"
+              const greeting = userName
+                ? `Hi ${userName}! I'm your career coach. How can I help you with your career today?`
+                : "Hi there! I'm your career coach. How can I help you with your career today?"
               streamToChannel(agent.tts.speak(greeting), 'Greeting')
 
               // Process audio through the voice agent pipeline
@@ -194,9 +197,14 @@ app.get(
           if (message.ttsProvider) {
             ttsProvider = message.ttsProvider as TTSProvider
           }
+          if (message.userName) {
+            userName = message.userName as string
+            console.log('User name received:', userName)
+          }
           sendSignalingMessage({
             type: 'providers-configured',
             providers: { sttProvider, ttsProvider },
+            userName,
           })
           return
         }
@@ -235,4 +243,4 @@ const port = 3001
 const server = serve({ fetch: app.fetch, port })
 injectWebSocket(server)
 
-console.log(`🥪 Voice Sandwich Demo running on http://localhost:${port}`)
+console.log(`🎯 Career Coach Voice Agent running on http://localhost:${port}`)

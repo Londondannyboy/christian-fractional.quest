@@ -1,0 +1,29 @@
+{
+  "name": "@careers-assistant/agent",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "npx @langchain/langgraph-cli dev --port 8123 --no-browser",
+    "dev:custom": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@copilotkit/sdk-js": "^1.51.3",
+    "@hono/node-server": "^1.13.1",
+    "@langchain/core": "^1.1.18",
+    "@langchain/langgraph": "^1.1.2",
+    "@langchain/langgraph-checkpoint": "^1.0.0",
+    "@langchain/openai": "^1.2.4",
+    "dotenv": "^16.4.5",
+    "hono": "^4.6.10",
+    "uuid": "^11.0.3",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/uuid": "^10.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}
