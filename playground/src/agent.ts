@@ -2,10 +2,10 @@ import { AssemblyAISpeechToText } from '@create-voice-agent/assemblyai'
 import { ElevenLabsTextToSpeech } from '@create-voice-agent/elevenlabs'
 import { HumeTextToSpeech } from '@create-voice-agent/hume'
 import { OpenAISpeechToText, OpenAITextToSpeech } from '@create-voice-agent/openai'
-import { ChatGoogleGenerativeAI } from '@langchain/google-genai'
 import { MemorySaver } from '@langchain/langgraph'
 import { createVoiceAgent } from 'create-voice-agent'
 
+import { LangGraphModel } from './langgraph-model.js'
 import { createFillerMiddleware } from './middleware.js'
 import { hangUp } from './tools.js'
 
@@ -53,6 +53,8 @@ interface CreateVoiceAgentParams {
   providers?: ProviderConfig
   /** User's name for personalized greeting */
   userName?: string
+  /** The thread ID for the conversation */
+  threadId?: string
 }
 
 /**
@@ -148,16 +150,16 @@ export function createCareerCoachVoiceAgent(params: CreateVoiceAgentParams) {
     onSpeechStart,
     providers = { sttProvider: 'assemblyai', ttsProvider: 'elevenlabs' },
     userName,
+    threadId,
   } = params
 
   console.log(
-    `Creating voice agent with STT: ${providers.sttProvider}, TTS: ${providers.ttsProvider}, User: ${userName || 'Anonymous'}`
+    `Creating voice agent with STT: ${
+      providers.sttProvider
+    }, TTS: ${providers.ttsProvider}, User: ${
+      userName || 'Anonymous'
+    }, Thread: ${threadId || 'N/A'}`
   )
-
-  // Build personalized system prompt
-  const personalizedPrompt = userName
-    ? `USER CONTEXT: The user's name is ${userName}. Always address them by name.\n\n${SYSTEM_PROMPT}`
-    : SYSTEM_PROMPT
 
   const stt = createSTTProvider(providers.sttProvider, onSpeechStart)
   const tts = createTTSProvider(providers.ttsProvider, () => {
@@ -169,9 +171,7 @@ export function createCareerCoachVoiceAgent(params: CreateVoiceAgentParams) {
 
   return createVoiceAgent({
     // LangChain agent configuration
-    model: new ChatGoogleGenerativeAI({ model: 'gemini-2.5-flash' }),
-    tools: [hangUp],
-    systemPrompt: personalizedPrompt,
+    model: new LangGraphModel(threadId),
     checkpointer: new MemorySaver(),
 
     // Voice configuration

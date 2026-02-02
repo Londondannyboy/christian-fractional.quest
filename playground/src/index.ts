@@ -57,6 +57,7 @@ app.get(
     let sttProvider: STTProvider = 'assemblyai'
     let ttsProvider: TTSProvider = 'elevenlabs'
     let userName: string | undefined
+    let threadId: string | undefined
 
     function sendSignalingMessage(message: object) {
       if (signalingWs && signalingWs.readyState === 1) {
@@ -121,6 +122,9 @@ app.get(
 
             audioDataChannel.onopen = async () => {
               console.log('Audio channel open')
+              
+              // Generate a unique thread ID for this conversation
+              threadId = `voice-session-${Math.random().toString(36).substring(2, 15)}`
 
               // Create the voice agent with selected providers
               agent = createCareerCoachVoiceAgent({
@@ -136,6 +140,7 @@ app.get(
                 },
                 providers: { sttProvider, ttsProvider },
                 userName,
+                threadId,
               })
 
               // Helper to stream audio chunks to the data channel

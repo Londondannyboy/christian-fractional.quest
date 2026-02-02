@@ -3,11 +3,141 @@
 import { CopilotSidebar } from "@copilotkit/react-ui";
 import { useCopilotAction, useCopilotReadable } from "@copilotkit/react-core";
 import { authClient } from "@/lib/auth/client";
-import { useMemo } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import { useZepMemory } from "@/hooks/useZepMemory";
+
+// Try to import useAgent from v2 API for HITL support
+let useAgent: (() => { agent: any }) | null = null;
+try {
+  // Dynamic import check - this will work if the v2 API is available
+  const v2Module = require("@copilotkit/react-core/v2");
+  useAgent = v2Module.useAgent;
+} catch {
+  // v2 API not available, HITL will use fallback
+}
+
+/**
+ * HITL (Human-in-the-Loop) Confirmation Handler
+ * Displays pill buttons when the LangGraph agent requests confirmation
+ */
+function HITLConfirmation({
+  message,
+  onConfirm,
+  onCancel,
+  type = "soft",
+}: {
+  message: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  type?: "soft" | "hard";
+}) {
+  const isHard = type === "hard";
+
+  return (
+    <div className="fixed bottom-24 left-1/2 transform -translate-x-1/2 z-50 animate-in slide-in-from-bottom-4">
+      <div
+        className={`
+        p-4 rounded-xl shadow-2xl border-2 max-w-md
+        ${isHard ? "bg-amber-50 border-amber-300" : "bg-white border-gray-200"}
+      `}
+      >
+        {isHard && (
+          <div className="flex items-center gap-2 mb-2 text-amber-700">
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+              <path
+                fillRule="evenodd"
+                d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                clipRule="evenodd"
+              />
+            </svg>
+            <span className="font-semibold text-sm">Action Required</span>
+          </div>
+        )}
+        <p className="text-gray-700 mb-4 whitespace-pre-line">{message}</p>
+        <div className="flex gap-3 justify-center">
+          <button
+            onClick={onConfirm}
+            className={`
+              px-5 py-2 rounded-full font-medium transition-all
+              ${
+                isHard
+                  ? "bg-amber-500 hover:bg-amber-600 text-white"
+                  : "bg-green-500 hover:bg-green-600 text-white"
+              }
+            `}
+          >
+            {isHard ? "Yes, Proceed" : "Confirm"}
+          </button>
+          <button
+            onClick={onCancel}
+            className="px-5 py-2 rounded-full font-medium bg-gray-200 hover:bg-gray-300 text-gray-700 transition-all"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Hook to handle HITL interrupts from LangGraph agent
+ */
+function useHITLHandler() {
+  const [interrupt, setInterrupt] = useState<{
+    message: string;
+    type: "soft" | "hard";
+  } | null>(null);
+
+  // Try to use the v2 agent API if available
+  const agentHook = useAgent ? useAgent() : null;
+  const agent = agentHook?.agent;
+
+  useEffect(() => {
+    if (!agent) return;
+
+    const subscriber = {
+      onCustomEvent: ({ event }: { event: { name: string; value: string } }) => {
+        if (event.name === "on_interrupt") {
+          // Determine if this is a hard or soft confirmation
+          const isHard =
+            event.value.toLowerCase().includes("important") ||
+            event.value.toLowerCase().includes("submit") ||
+            event.value.toLowerCase().includes("apply");
+          setInterrupt({
+            message: event.value,
+            type: isHard ? "hard" : "soft",
+          });
+        }
+      },
+    };
+
+    const { unsubscribe } = agent.subscribe(subscriber);
+    return () => unsubscribe();
+  }, [agent]);
+
+  const handleResponse = useCallback(
+    (response: string) => {
+      if (agent) {
+        agent.runAgent({
+          forwardedProps: {
+            command: { resume: response },
+          },
+        });
+      }
+      setInterrupt(null);
+    },
+    [agent]
+  );
+
+  return { interrupt, handleResponse };
+}
 
 export default function Home() {
   const { data: session } = authClient.useSession();
+
+  // HITL handler for LangGraph interrupts
+  const { interrupt, handleResponse } = useHITLHandler();
 
   // Extract user info
   const user = session?.user;
@@ -124,6 +254,16 @@ When users share career information (skills, experience, goals, preferences), us
 
   return (
     <div className="min-h-screen flex">
+      {/* HITL Confirmation Modal */}
+      {interrupt && (
+        <HITLConfirmation
+          message={interrupt.message}
+          type={interrupt.type}
+          onConfirm={() => handleResponse("yes")}
+          onCancel={() => handleResponse("no")}
+        />
+      )}
+
       {/* Main Content */}
       <div className="flex-1 p-8">
         <div className="max-w-4xl mx-auto">

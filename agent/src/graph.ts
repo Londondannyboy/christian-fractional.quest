@@ -8,6 +8,7 @@
  */
 
 import { z } from "zod";
+import { query } from "./db.js";
 import { RunnableConfig } from "@langchain/core/runnables";
 import { tool } from "@langchain/core/tools";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
@@ -71,8 +72,30 @@ export type CareerAgentStateType = typeof CareerAgentState.State;
 /**
  * Save user profile - requires soft confirmation
  */
+import { query } from "./db.js";
+
+// ... (rest of the file is the same until saveProfile)
+
 const saveProfile = tool(
-  async ({ skills, experienceYears, desiredRole, salaryMin, salaryMax, locationPreference, remotePreference }) => {
+  async ({ userId, skills, experienceYears, desiredRole, salaryMin, salaryMax, locationPreference, remotePreference }) => {
+    // This tool now requires a userId to save the profile against.
+    // The calling agent MUST provide the userId from the user's session.
+    if (!userId) {
+      return JSON.stringify({
+        success: false,
+        message: "Could not save profile because user is not authenticated. Please sign in.",
+      });
+    }
+
+    const profileData = {
+      skills,
+      experienceYears,
+      desiredRole,
+      salaryRange: { min: salaryMin, max: salaryMax },
+      locationPreference,
+      remotePreference,
+    };
+
     // Soft HITL - ask user to confirm before saving
     const confirmationMessage = `I'd like to save your profile with:
 - Skills: ${skills?.join(', ') || 'Not specified'}
@@ -86,13 +109,28 @@ Is this correct?`;
 
     const userResponse = interrupt(confirmationMessage);
 
-    // User confirmed
     if (userResponse?.toLowerCase().includes('yes') || userResponse?.toLowerCase().includes('correct')) {
-      return JSON.stringify({
-        success: true,
-        message: "Profile saved successfully!",
-        profile: { skills, experienceYears, desiredRole, salaryMin, salaryMax, locationPreference, remotePreference }
-      });
+      try {
+        const sql = `
+          INSERT INTO user_profiles (user_id, profile_data)
+          VALUES ($1, $2)
+          ON CONFLICT (user_id)
+          DO UPDATE SET profile_data = EXCLUDED.profile_data, updated_at = CURRENT_TIMESTAMP;
+        `;
+        await query(sql, [userId, JSON.stringify(profileData)]);
+        
+        return JSON.stringify({
+          success: true,
+          message: "Profile saved successfully!",
+          profile: profileData,
+        });
+      } catch (error) {
+        console.error("Failed to save profile to database:", error);
+        return JSON.stringify({
+          success: false,
+          message: "Sorry, I encountered an error while saving your profile. Please try again.",
+        });
+      }
     }
 
     return JSON.stringify({
@@ -102,8 +140,9 @@ Is this correct?`;
   },
   {
     name: "save_profile",
-    description: "Save the user's career profile. Use this when you have gathered enough information about their skills, experience, and job preferences.",
+    description: "Save the user's career profile to the database. Use this when you have gathered enough information about their skills, experience, and job preferences.",
     schema: z.object({
+      userId: z.string().describe("The ID of the user to save the profile for. This is required."),
       skills: z.array(z.string()).optional().describe("List of professional skills"),
       experienceYears: z.number().optional().describe("Years of professional experience"),
       desiredRole: z.string().optional().describe("The type of role they're looking for"),

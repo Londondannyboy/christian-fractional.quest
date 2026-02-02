@@ -1,19 +1,18 @@
 import {
   CopilotRuntime,
   ExperimentalEmptyAdapter,
-  copilotRuntimeNextJSAppRouterEndpoint,
 } from "@copilotkit/runtime";
 import { LangGraphAgent } from "@copilotkit/runtime/langgraph";
 import { NextRequest } from "next/server";
+import { auth } from "@/lib/auth/server";
 
-// Use empty adapter since our LangGraph agent handles the LLM
 const serviceAdapter = new ExperimentalEmptyAdapter();
 
-// Connect to the LangGraph agent served by the CLI
 const runtime = new CopilotRuntime({
   agents: {
     careers_coach: new LangGraphAgent({
-      deploymentUrl: process.env.LANGGRAPH_DEPLOYMENT_URL || "http://localhost:8123",
+      deploymentUrl:
+        process.env.LANGGRAPH_DEPLOYMENT_URL || "http://localhost:8123",
       graphId: "careers_coach",
       langsmithApiKey: process.env.LANGSMITH_API_KEY || "",
     }),
@@ -21,11 +20,25 @@ const runtime = new CopilotRuntime({
 });
 
 export const POST = async (req: NextRequest) => {
-  const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
-    runtime,
-    serviceAdapter,
-    endpoint: "/api/copilotkit",
-  });
+  try {
+    const { user } = await auth.validateRequest(req);
+    const requestBody = await req.json();
 
-  return handleRequest(req);
+    if (user) {
+      // Inject userId into the LangGraph agent's state
+      requestBody.state = requestBody.state || {};
+      requestBody.state.userProfile = requestBody.state.userProfile || {};
+      requestBody.state.userProfile.userId = user.id;
+    }
+
+    return await runtime.response(requestBody, serviceAdapter);
+  } catch (error) {
+    if (error instanceof Error) {
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    return new Response(null, { status: 500 });
+  }
 };

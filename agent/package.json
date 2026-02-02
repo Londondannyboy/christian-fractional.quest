@@ -15,6 +15,7 @@
     "@langchain/langgraph": "^1.1.2",
     "@langchain/langgraph-checkpoint": "^1.0.0",
     "@langchain/openai": "^1.2.4",
+    "@neondatabase/serverless": "^1.0.2",
     "dotenv": "^16.4.5",
     "hono": "^4.6.10",
     "uuid": "^11.0.3",
